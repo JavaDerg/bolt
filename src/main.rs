@@ -27,6 +27,8 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 async fn main() {
     tracing_subscriber::fmt::init();
 
+    config::lexer::parse(include_str!("../icarus.conf"));
+
     let config = cfg::ServerConfig::builder(DomainSpecificConfig::new(
         cfg::load_cert_key(Path::new("public.crt"), Path::new("private.key")),
         Router::new(),
