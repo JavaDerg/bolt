@@ -1,5 +1,7 @@
+mod tokenizer;
+
 use nom::multi::many0;
-use nom::IResult;
+use nom::{IResult, AsChar};
 use nom::bytes::complete::tag;
 
 pub fn parse(cfg_str: &str) {
