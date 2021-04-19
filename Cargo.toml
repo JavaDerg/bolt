@@ -18,6 +18,10 @@ regex = "1.4.5"
 url = "2.2.1"
 nom = "6.1.2"
 
+[dependencies.mlua]
+version = "0.5"
+features = ["luajit", "vendored", "module", "async", "send"]
+
 [dependencies.mimalloc]
 version = "*"
 default-features = false
