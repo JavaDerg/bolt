@@ -567,20 +567,8 @@ dependencies = [
  "lazy_static",
  "lua-src",
  "luajit-src",
- "mlua_derive",
  "num-traits",
  "pkg-config",
-]
-
-[[package]]
-name = "mlua_derive"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c392ad4a7c4414a819f1b16d04751bd21e94b3425f1b2cf79d4a87a4e78c5203"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

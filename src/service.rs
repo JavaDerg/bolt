@@ -6,6 +6,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use mlua::Function;
 
 pub struct MainService {
     dsc: Arc<DomainSpecificConfig>,

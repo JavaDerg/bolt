@@ -2,7 +2,7 @@ use std::iter::Scan;
 use std::str::Chars;
 use nom::AsChar;
 
-struct Tokenizer<'a> {
+pub struct Tokenizer<'a> {
 	string: &'a str,
 	inner: Scan<Chars<'a>, usize, fn(&mut usize, char) -> Option<(usize, char)>>,
 	index: usize,
@@ -22,6 +22,7 @@ impl<'a> Iterator for Tokenizer<'a> {
 	type Item = &'a str;
 
 	fn next(&mut self) -> Option<Self::Item> {
+
 		let (index, char) = self.inner.next()?;
 
 		match self.state {
@@ -37,7 +38,7 @@ impl TokenizerState {
 	pub fn in_escape(&self) -> bool {
 		match self {
 			TokenizerState::Normal => false,
-			TokenizerState::String { escaping, .. } => escaping,
+			TokenizerState::String { escaping, .. } => *escaping,
 		}
 	}
 }

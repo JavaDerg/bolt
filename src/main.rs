@@ -6,6 +6,7 @@ mod responder;
 mod router;
 mod sanitizer;
 mod service;
+mod lua;
 
 use crate::cfg::{DomainSpecificConfig, ServerConfig};
 use crate::router::Router;
@@ -29,9 +30,11 @@ async fn main() {
 
     config::parser::parse(include_str!("../config/icarus.conf"));
 
+    let lfn = lua::load_fn(include_str!("lua_src/test.lua"));
+
     let config = cfg::ServerConfig::builder(DomainSpecificConfig::new(
         cfg::load_cert_key(Path::new("public.crt"), Path::new("private.key")),
-        Router::new(),
+        Router::new(lfn),
     ))
     .finish();
 
@@ -57,10 +60,11 @@ async fn main() {
                     .http1_keep_alive(true)
                     .serve_connection(stream, service)
                     .await;
-            }
+            }i
             .instrument(tracing::info_span!("client", "{}", peer_addr.to_string())),
         );
     }*/
+
 
     loop {
         let (stream, peer_addr) = listener.accept().await.unwrap();
@@ -82,7 +86,6 @@ async fn main() {
                 let service = MainService::new(dsc);
 
                 let _ = Http::new()
-                    .http1_keep_alive(true)
                     .serve_connection(stream.compat(), service)
                     .await;
             }

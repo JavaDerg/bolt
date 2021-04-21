@@ -20,7 +20,7 @@ nom = "6.1.2"
 
 [dependencies.mlua]
 version = "0.5"
-features = ["luajit", "vendored", "module", "async", "send"]
+features = ["luajit", "vendored", "async", "send"]
 
 [dependencies.mimalloc]
 version = "*"
