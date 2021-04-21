@@ -1,12 +1,13 @@
 mod cfg;
 mod config;
+mod local;
+mod lua;
 mod map_maybe;
 mod net;
 mod responder;
 mod router;
 mod sanitizer;
 mod service;
-mod lua;
 
 use crate::cfg::{DomainSpecificConfig, ServerConfig};
 use crate::router::Router;
@@ -65,7 +66,6 @@ async fn main() {
         );
     }*/
 
-
     loop {
         let (stream, peer_addr) = listener.accept().await.unwrap();
         let acceptor = acceptor.clone();
@@ -85,9 +85,7 @@ async fn main() {
 
                 let service = MainService::new(dsc);
 
-                let _ = Http::new()
-                    .serve_connection(stream.compat(), service)
-                    .await;
+                let _ = Http::new().serve_connection(stream.compat(), service).await;
             }
             .instrument(tracing::info_span!("client", "{}", peer_addr.to_string())),
         );

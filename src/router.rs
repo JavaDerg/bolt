@@ -1,8 +1,8 @@
 use crate::responder::{FileResponder, Responder, StaticBinaryResponder};
 use hyper::{Body, Request, Response};
+use mlua::Function;
 use std::convert::Infallible;
 use std::error::Error;
-use mlua::Function;
 use tokio::sync::Mutex;
 use tokio::task::LocalSet;
 
@@ -38,7 +38,7 @@ impl Router {
                 ),
                 (String::from("/"), Box::new(FileResponder)),
             ],
-            lfn: Mutex::new(lfn)
+            lfn: Mutex::new(lfn),
         }
     }
 
@@ -50,12 +50,12 @@ impl Router {
             .find(|(path, ..)| request_path.starts_with(path))
             .map(|(_, responder)| responder);
         if route.is_none() {
-            let table: mlua::Table = LocalSet::new().run_until(async { self.lfn.lock().await.call_async(()).await.unwrap() }).await;
-            let body = table
-                .get::<_, Option<String>>("body")?
-                .unwrap_or_default();
-            let mut resp = Response::builder()
-                .status(table.get::<_, Option<u16>>("status")?.unwrap_or(200));
+            let table: mlua::Table = LocalSet::new()
+                .run_until(async { self.lfn.lock().await.call_async(()).await.unwrap() })
+                .await;
+            let body = table.get::<_, Option<String>>("body")?.unwrap_or_default();
+            let mut resp =
+                Response::builder().status(table.get::<_, Option<u16>>("status")?.unwrap_or(200));
             if let Some(headers) = table.get::<_, Option<mlua::Table>>("headers")? {
                 for pair in headers.pairs::<String, String>() {
                     let (h, v) = pair?;
