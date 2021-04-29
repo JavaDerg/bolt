@@ -8,7 +8,7 @@ use tokio::task::LocalSet;
 
 pub struct Router {
     routes: Vec<(String, Box<dyn Responder + 'static + Send + Sync>)>,
-    lfn: Mutex<Function<'static>>, // FIXME: This sucks x2
+    lfn: crate::lua::SyncFunction<(), mlua::Table, String>
 }
 
 impl Router {

@@ -1,6 +1,5 @@
 mod cfg;
 mod config;
-mod local;
 mod lua;
 mod map_maybe;
 mod net;
