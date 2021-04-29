@@ -1,6 +1,5 @@
 mod cfg;
 mod config;
-mod lua;
 mod map_maybe;
 mod net;
 mod responder;
@@ -30,11 +29,9 @@ async fn main() {
 
     config::parser::parse(include_str!("../config/icarus.conf"));
 
-    let lfn = lua::load_fn(include_str!("lua_src/test.lua"));
-
     let config = cfg::ServerConfig::builder(DomainSpecificConfig::new(
         cfg::load_cert_key(Path::new("public.crt"), Path::new("private.key")),
-        Router::new(lfn),
+        Router::new(),
     ))
     .finish();
 

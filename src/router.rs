@@ -1,6 +1,5 @@
 use crate::responder::{FileResponder, Responder, StaticBinaryResponder};
 use hyper::{Body, Request, Response};
-use mlua::Function;
 use std::convert::Infallible;
 use std::error::Error;
 use tokio::sync::Mutex;
@@ -8,11 +7,10 @@ use tokio::task::LocalSet;
 
 pub struct Router {
     routes: Vec<(String, Box<dyn Responder + 'static + Send + Sync>)>,
-    lfn: crate::lua::SyncFunction<(), mlua::Table, String>
 }
 
 impl Router {
-    pub fn new(lfn: Function<'static>) -> Self {
+    pub fn new() -> Self {
         Self {
             routes: vec![
                 (
@@ -38,7 +36,6 @@ impl Router {
                 ),
                 (String::from("/"), Box::new(FileResponder)),
             ],
-            lfn: Mutex::new(lfn),
         }
     }
 
@@ -50,19 +47,6 @@ impl Router {
             .find(|(path, ..)| request_path.starts_with(path))
             .map(|(_, responder)| responder);
         if route.is_none() {
-            let table: mlua::Table = LocalSet::new()
-                .run_until(async { self.lfn.lock().await.call_async(()).await.unwrap() })
-                .await;
-            let body = table.get::<_, Option<String>>("body")?.unwrap_or_default();
-            let mut resp =
-                Response::builder().status(table.get::<_, Option<u16>>("status")?.unwrap_or(200));
-            if let Some(headers) = table.get::<_, Option<mlua::Table>>("headers")? {
-                for pair in headers.pairs::<String, String>() {
-                    let (h, v) = pair?;
-                    resp = resp.header(&h, v);
-                }
-            }
-            return Ok(resp.body(Body::from(body)).unwrap());
             return Ok(_404(&request));
         }
         let route = route.unwrap();
