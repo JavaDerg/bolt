@@ -1,0 +1,20 @@
+document = { SOI ~ command_list ~ EOI }
+command_list = { ((block | command)? ~ NEWLINE)* }
+
+block = { command ~ "{" ~ NEWLINE ~ command_list ~ "}" }
+command = { name ~ (spacing ~ argument?)+ }
+
+name = ${ ASCII_ALPHA+ ~ (dot ~ ASCII_ALPHA+)* }
+argument = @{ prefixed_number | NUMBER+ | string | (!spacing ~ ANY+) }
+dot = @{"."}
+prefixed_number = { NUMBER ~ ASCII_ALPHA+ }
+
+spacing = _{ (" " | "\t" )+ }
+format_prefix = @{"$"}
+
+string = ${ format_prefix? ~ "\"" ~ inner_string ~ "\"" }
+inner_string = @{ (!("\"" | "\\") ~ ANY)* ~ (escape ~ inner_string)? } // taken from https://github.com/pest-parser/pest/blob/master/meta/src/grammar.pest
+escape    = @{ "\\" ~ ("\"" | "\\" | "r" | "n" | "t" | "0" | "'" | code | unicode) }
+code      = @{ "x" ~ hex_digit{2} }
+unicode   = @{ "u{" ~ hex_digit{2, 6} ~ "}" }
+hex_digit = @{ '0'..'9' | 'a'..'f' | 'A'..'F' }

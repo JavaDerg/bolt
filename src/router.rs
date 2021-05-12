@@ -1,9 +1,9 @@
-use crate::responder::{FileResponder, Responder, StaticBinaryResponder};
-use hyper::{Body, Request, Response};
 use std::convert::Infallible;
 use std::error::Error;
-use tokio::sync::Mutex;
-use tokio::task::LocalSet;
+
+use hyper::{Body, Request, Response};
+
+use crate::responder::{FileResponder, Responder, StaticBinaryResponder};
 
 pub struct Router {
     routes: Vec<(String, Box<dyn Responder + 'static + Send + Sync>)>,
@@ -76,7 +76,7 @@ pub fn _404(request: &Request<Body>) -> Response<Body> {
                     }
                 }
             }
-            .into_string(),
+                .into_string(),
         ))
         .unwrap()
 }

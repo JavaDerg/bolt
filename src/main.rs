@@ -1,3 +1,23 @@
+extern crate pest;
+#[macro_use]
+extern crate pest_derive;
+
+use std::path::Path;
+use std::sync::Arc;
+
+use async_rustls::TlsAcceptor;
+use hyper::server::conn::Http;
+use rustls::{KeyLog, NoClientAuth};
+use tokio::net::TcpListener;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+pub use tracing::{error, info, trace, warn};
+use tracing_futures::Instrument;
+
+use crate::cfg::{DomainSpecificConfig, ServerConfig};
+use crate::pest::Parser;
+use crate::router::Router;
+use crate::service::MainService;
+
 mod cfg;
 mod config;
 mod map_maybe;
@@ -7,19 +27,6 @@ mod router;
 mod sanitizer;
 mod service;
 
-use crate::cfg::{DomainSpecificConfig, ServerConfig};
-use crate::router::Router;
-use crate::service::MainService;
-use async_rustls::TlsAcceptor;
-use hyper::server::conn::Http;
-use rustls::{KeyLog, NoClientAuth};
-use std::path::Path;
-use std::sync::Arc;
-use tokio::net::TcpListener;
-use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-pub use tracing::{error, info, trace, warn};
-use tracing_futures::Instrument;
-
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
@@ -27,13 +34,13 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    config::parser::parse(include_str!("../config/icarus.conf"));
+    config::parser::parse();
 
     let config = cfg::ServerConfig::builder(DomainSpecificConfig::new(
         cfg::load_cert_key(Path::new("public.crt"), Path::new("private.key")),
         Router::new(),
     ))
-    .finish();
+        .finish();
 
     let tls_config = make_ssl_config(config.clone());
 
@@ -83,7 +90,7 @@ async fn main() {
 
                 let _ = Http::new().serve_connection(stream.compat(), service).await;
             }
-            .instrument(tracing::info_span!("client", "{}", peer_addr.to_string())),
+                .instrument(tracing::info_span!("client", "{}", peer_addr.to_string())),
         );
     }
 }

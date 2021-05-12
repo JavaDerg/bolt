@@ -3,6 +3,7 @@ body {
     background-repeat: repeat;
     font-family: sans-serif;
 }
-h1,h3,p {
+
+h1, h3, p {
     background: white;
 }

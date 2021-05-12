@@ -1,8 +1,7 @@
-use hyper::http::uri::PathAndQuery;
-use hyper::{Body, Request};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::path::Path;
+
+use hyper::{Body, Request};
 use url::Url;
 
 #[derive(Debug)]
@@ -17,7 +16,7 @@ pub fn sanitize_request_path(request: &Request<Body>) -> Result<Url, Sanitizatio
             .map(|pq| pq.as_str())
             .unwrap_or("")
     ))
-    .map_err(|_| SanitizationError)
+        .map_err(|_| SanitizationError)
 }
 
 impl Display for SanitizationError {

@@ -342,6 +342,7 @@ dependencies = [
  "regex",
  "rustls",
  "rustls-pemfile",
+ "smallvec",
  "tokio",
  "tokio-util",
  "tracing",

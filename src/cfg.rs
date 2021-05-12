@@ -1,13 +1,15 @@
-use crate::map_maybe::MapMaybeExt;
-use crate::router::Router;
-use async_rustls::rustls::sign::CertifiedKey;
-use async_rustls::rustls::ClientHello;
-use rustls::ResolvesServerCert;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, Read};
 use std::path::Path;
 use std::sync::Arc;
+
+use async_rustls::rustls::ClientHello;
+use async_rustls::rustls::sign::CertifiedKey;
+use rustls::ResolvesServerCert;
+
+use crate::map_maybe::MapMaybeExt;
+use crate::router::Router;
 
 pub struct ServerConfig {
     default: Arc<DomainSpecificConfig>,
@@ -32,7 +34,7 @@ struct FakeReader<'a>(&'a [u8], usize);
 impl ServerConfig {
     pub fn builder(default_dsc: Arc<DomainSpecificConfig>) -> ServerConfigBuilder {
         ServerConfigBuilder(ServerConfig {
-            default: default_dsc.clone(),
+            default: default_dsc,
             domain_specific: Default::default(),
         })
     }
@@ -44,7 +46,7 @@ impl ServerConfig {
     pub fn get(&self, domain: &[u8]) -> Arc<DomainSpecificConfig> {
         self.domain_specific
             .get(&DomainKey::Shared(domain))
-            .or_else(|| Some(&self.default))
+            .or(Some(&self.default))
             .unwrap()
             .clone()
     }
@@ -149,7 +151,7 @@ pub fn load_cert_key(certs: &Path, key: &Path) -> CertifiedKey {
                 std::fs::read(key).unwrap().as_slice(),
                 0,
             ))
-            .unwrap()
+                .unwrap()
             {
                 Some(rustls_pemfile::Item::RSAKey(key)) => break rustls::PrivateKey(key),
                 Some(rustls_pemfile::Item::PKCS8Key(key)) => break rustls::PrivateKey(key),

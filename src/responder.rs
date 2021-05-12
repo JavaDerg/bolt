@@ -1,8 +1,10 @@
-use crate::sanitizer::sanitize_request_path;
-use async_trait::async_trait;
-use hyper::{Body, Request, Response};
 use std::error::Error;
 use std::path::Path;
+
+use async_trait::async_trait;
+use hyper::{Body, Request, Response};
+
+use crate::sanitizer::sanitize_request_path;
 
 #[async_trait]
 pub trait Responder {
@@ -30,7 +32,7 @@ impl Responder for FileResponder {
     async fn respond(&self, request: Request<Body>) -> Result<Response<Body>, Box<dyn Error>> {
         let path = sanitize_request_path(&request)?;
         let mut path = path.path();
-        if path.starts_with("/") {
+        if path.starts_with('/') {
             path = &path[1..];
         }
         let mut path = Path::new("./html").join(Path::new(path));
