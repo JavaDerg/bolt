@@ -64,6 +64,7 @@ pub enum EqualityType {
     Equal,
     Regex,
     BeginsWith,
+    EndsWith,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -216,7 +217,7 @@ pub fn parse(src: &str) -> Result<Vec<Token>, ParseError> {
                 }
             }
             '.' => util.submit(ParserState::Dot)?,
-            '=' | '~' | '^' => {
+            '=' | '~' | '^' | '$' => {
                 util.submit(ParserState::EqualitySwitch(EqualityType::from(next)))?
             }
             '{' | '}' => util.submit(ParserState::Block(if next == '{' {
@@ -419,6 +420,7 @@ impl From<char> for EqualityType {
             '=' => EqualityType::Equal,
             '~' => EqualityType::Regex,
             '^' => EqualityType::BeginsWith,
+            '$' => EqualityType::EndsWith,
             _ => panic!("Invalid indicator char type"),
         }
     }
