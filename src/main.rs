@@ -21,6 +21,8 @@ mod responder;
 mod router;
 mod sanitizer;
 mod service;
+#[cfg(test)]
+mod tests;
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -28,11 +30,6 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-
-    warn!(
-        "{:?}",
-        config::parser::parse(include_str!("../config/sites/example.com.conf"))
-    );
 
     let config = cfg::ServerConfig::builder(DomainSpecificConfig::new(
         cfg::load_cert_key(Path::new("public.crt"), Path::new("private.key")),
