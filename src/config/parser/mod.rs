@@ -5,6 +5,7 @@ use std::mem::swap;
 use nom::AsChar;
 use smallvec::SmallVec;
 
+#[derive(Debug)]
 pub enum Token {}
 
 struct ParseUtil<'a> {
@@ -21,6 +22,10 @@ enum ParserState {
         start: usize,
         end: usize,
     },
+    Prefix {
+        start: usize,
+        end: usize,
+    },
     Numeral {
         start: usize,
         end: usize,
@@ -28,16 +33,15 @@ enum ParserState {
     String {
         start: usize,
         end: usize,
-        escapes: SmallVec<[usize; 8]>,
+        escapes: SmallVec<[usize; 4]>,
         kind: StringType,
     },
-    Seperator,
+    Separator,
     Indicator(IndicatorType),
     Block(BlockType),
     Spacer,
     NewLine,
 }
-
 #[derive(Eq, PartialEq)]
 enum IndicatorType {
     Equal,
@@ -57,9 +61,11 @@ enum StringType {
     DoubleQuote,
 }
 
+/// TODO: include location
 #[derive(Debug)]
 pub enum ParseError {
-    UnexpectedCharacter(char), // TODO: include location
+    UnexpectedCharacter(char),
+    EarlyEof,
 }
 
 pub fn parse(src: &str) -> Result<Vec<Token>, ParseError> {
@@ -72,8 +78,16 @@ pub fn parse(src: &str) -> Result<Vec<Token>, ParseError> {
     };
     while let Some(next) = util.next() {
         match next {
-            _ if util.state.is_string() => todo!(),
             'a'..='z' | 'A'..='Z' => {
+                if util.state.is_numeral() {
+                    util.submit(ParserState::Prefix {
+                        start: util.current,
+                        end: util.current,
+                    });
+                }
+                if util.state.is_prefix() {
+                    continue;
+                }
                 if !util.state.is_statement() {
                     util.submit(ParserState::Statement {
                         start: util.current,
@@ -89,9 +103,99 @@ pub fn parse(src: &str) -> Result<Vec<Token>, ParseError> {
                     });
                 }
             }
-            '"' => (),
-            '\'' => (),
-            '.' => util.submit(ParserState::Seperator),
+            '"' => {
+                let start = util.current;
+                let mut escapes = SmallVec::new();
+                let mut invalid = true;
+                while let Some(next) = util.next() {
+                    match next {
+                        '\\' => {
+                            escapes.push(util.current - 1);
+                            match util.peek() {
+                                Some('0') | Some('n') | Some('r') | Some('t') | Some('"') => {
+                                    let _ = util.next().ok_or(ParseError::EarlyEof)?;
+                                }
+                                Some('x') => {
+                                    // \x00
+                                    for _ in 0..3 {
+                                        let _ = util.next().ok_or(ParseError::EarlyEof)?;
+                                    }
+                                }
+                                Some('u') => {
+                                    // \u{2-6 hex digit}
+                                    util.advance(); // u
+                                    match util.next() {
+                                        Some('{') => (),
+                                        Some(c) => return Err(ParseError::UnexpectedCharacter(c)),
+                                        None => return Err(ParseError::EarlyEof),
+                                    }
+                                    for i in 0..6 {
+                                        if let Some(char) = util.peek() {
+                                            if !char.is_hex_digit() {
+                                                if i < 2 {
+                                                    return Err(ParseError::UnexpectedCharacter(
+                                                        char,
+                                                    ));
+                                                }
+                                                break;
+                                            }
+                                        } else {
+                                            return Err(ParseError::EarlyEof);
+                                        }
+                                    }
+                                    match util.next() {
+                                        Some('}') => (),
+                                        Some(c) => return Err(ParseError::UnexpectedCharacter(c)),
+                                        None => return Err(ParseError::EarlyEof),
+                                    }
+                                }
+                                Some(char) => return Err(ParseError::UnexpectedCharacter(char)),
+                                None => return Err(ParseError::EarlyEof),
+                            }
+                        }
+                        '"' => {
+                            util.submit(ParserState::String {
+                                start,
+                                end: util.current,
+                                escapes,
+                                kind: StringType::DoubleQuote,
+                            });
+                            invalid = false;
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+                if invalid {
+                    return Err(ParseError::EarlyEof);
+                }
+            }
+            '\'' => {
+                let start = util.current;
+                let mut escapes = SmallVec::new();
+                let mut invalid = true;
+                while let Some(char) = util.next() {
+                    if char == '\'' {
+                        if let Some('\'') = util.peek() {
+                            escapes.push(util.current - 1);
+                            util.advance();
+                            continue;
+                        }
+                        util.submit(ParserState::String {
+                            start,
+                            end: util.current,
+                            escapes,
+                            kind: StringType::SingleQuote,
+                        });
+                        invalid = false;
+                        break;
+                    }
+                }
+                if invalid {
+                    return Err(ParseError::EarlyEof);
+                }
+            }
+            '.' => util.submit(ParserState::Separator),
             '=' | '~' | '^' => util.submit(ParserState::Indicator(IndicatorType::from(next))),
             '{' | '}' => util.submit(ParserState::Block(if next == '{' {
                 BlockType::Open
@@ -169,7 +273,7 @@ impl ParserState {
         match self {
             ParserState::Statement { end, .. } => *end = pos,
             ParserState::Numeral { end, .. } => *end = pos,
-            ParserState::String { end, .. } => *end = pos,
+            ParserState::Prefix { end, .. } => *end = pos,
             _ => (),
         }
     }
@@ -180,35 +284,19 @@ impl ParserState {
     }
 
     pub fn is_spacer(&self) -> bool {
-        if let Self::Spacer = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::Spacer)
     }
 
     fn is_statement(&self) -> bool {
-        if let Self::Statement { .. } = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::Statement { .. })
+    }
+
+    fn is_prefix(&self) -> bool {
+        matches!(self, Self::Prefix { .. })
     }
 
     pub fn is_numeral(&self) -> bool {
-        if let Self::Numeral { .. } = self {
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn is_string(&self) -> bool {
-        if let Self::String { .. } = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::Numeral { .. })
     }
 }
 
