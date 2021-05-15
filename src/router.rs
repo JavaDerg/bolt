@@ -14,20 +14,6 @@ impl Router {
         Self {
             routes: vec![
                 (
-                    String::from("/tux"),
-                    Box::new(StaticBinaryResponder {
-                        data: include_bytes!("./tux.gif"),
-                        content_type: "image/gif",
-                    }),
-                ),
-                (
-                    String::from("/eevee"),
-                    Box::new(StaticBinaryResponder {
-                        data: include_bytes!("./eevee.gif"),
-                        content_type: "image/gif",
-                    }),
-                ),
-                (
                     String::from("/test"),
                     Box::new(StaticBinaryResponder {
                         data: b"Hallo Welt!",
