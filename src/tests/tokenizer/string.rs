@@ -1,5 +1,4 @@
-use crate::config::parser::tokenizer::Token::*;
-pub use crate::config::parser::tokenizer::{tokenize, Token};
+use crate::config::parser::tokenizer::{tokenize, Token::*};
 use std::borrow::Cow;
 
 macro_rules! string {
@@ -12,7 +11,7 @@ macro_rules! string {
 }
 
 #[test]
-fn unit_test_string_macro() {
+fn unit_test_macro() {
     assert_eq!(
         string!("test", false),
         String {
@@ -23,7 +22,7 @@ fn unit_test_string_macro() {
 }
 
 #[test]
-fn string_basic() {
+fn basic() {
     assert_eq!(tokenize(r#"''"#), Ok(vec![string!("", false), Eof]),);
     assert_eq!(
         tokenize(r#"'Hello world'"#),
@@ -36,7 +35,7 @@ fn string_basic() {
 }
 
 #[test]
-fn string_advanced() {
+fn advanced() {
     assert_eq!(tokenize(r#""""#), Ok(vec![string!("", true), Eof]),);
     assert_eq!(
         tokenize(r#""Hello world""#),

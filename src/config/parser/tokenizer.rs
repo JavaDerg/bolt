@@ -105,6 +105,7 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, TokenizeError> {
                         start: util.current,
                         end: util.current,
                     })?;
+                    continue;
                 }
                 if util.state.is_prefix() {
                     continue;
@@ -116,7 +117,10 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, TokenizeError> {
                     })?;
                 }
             }
-            '0'..='9' => {
+            c @ '0'..='9' => {
+                if util.state.is_prefix() {
+                    return Err(TokenizeError::UnexpectedCharacter(c));
+                }
                 if !util.state.is_numeral() && !util.state.is_statement() {
                     util.submit(ParserState::Numeral {
                         start: util.current,
@@ -296,6 +300,7 @@ impl<'a> Iterator for TokenizeUtil<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if !self.is_available() {
+            self.current = self.cnext;
             None
         } else {
             let char = self.src[self.cnext..].chars().next().unwrap(); // TODO: make this nicer?
