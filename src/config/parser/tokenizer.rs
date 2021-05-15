@@ -134,13 +134,16 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, TokenizeError> {
                             escapes.push(util.current);
                             match util.peek() {
                                 Some('0') | Some('n') | Some('r') | Some('t') | Some('"') => {
-                                    let _ = util.next().ok_or(TokenizeError::EarlyEof)?;
+                                    util.advance();
                                 }
                                 Some('x') => {
                                     // \x00
-                                    for _ in 0..3 {
-                                        let _ = util.next().ok_or(TokenizeError::EarlyEof)?;
-                                        // FIXME: TEST FOR HEX DIGITS
+                                    util.advance();
+                                    for _ in 0..2 {
+                                        let c = util.next().ok_or(TokenizeError::EarlyEof)?;
+                                        if !c.is_hex_digit() {
+                                            return Err(TokenizeError::UnexpectedCharacter(c));
+                                        }
                                     }
                                 }
                                 Some('u') => {
@@ -162,6 +165,8 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, TokenizeError> {
                                                     );
                                                 }
                                                 break;
+                                            } else {
+                                                util.advance();
                                             }
                                         } else {
                                             return Err(TokenizeError::EarlyEof);
@@ -332,43 +337,43 @@ impl ParserState {
                             for escptr in escapes {
                                 if last < escptr {
                                     buf.push_str(&src[last..escptr]);
-                                    let mut citr =
-                                        (&src[escptr + 1..]).chars().zip(escptr..).peekable();
-                                    last = escptr + 2;
-                                    match citr.next().unwrap() {
-                                        ('0', _) => buf.push('\0'),
-                                        ('n', _) => buf.push('\n'),
-                                        ('r', _) => buf.push('\r'),
-                                        ('t', _) => buf.push('\t'),
-                                        ('"', _) => buf.push('\"'),
-                                        ('\'', _) => buf.push('\''), // this also handles '' escapes in single quote strings, the pre tokenizer checks for validity
-                                        ('x', ptr) => {
-                                            let code = u16::from_str_radix(&src[ptr..ptr + 2], 16)
-                                                .map_err(TokenizeError::IntParseError)?
-                                                as u32;
-                                            last += 2;
-                                            buf.push(char::from_u32(code).ok_or(
-                                                TokenizeError::InvalidCharacterCode(code as u64),
-                                            )?)
-                                        }
-                                        ('u', _) => {
-                                            // SAFETY: Validity of syntax has been verified in pre tokenization
-                                            let _ = citr.next().unwrap(); // {
-                                            let (_, start) = citr.next().unwrap();
-                                            let (_, stop) = (&src[start..])
-                                                .chars()
-                                                .zip(start..)
-                                                .find(|(c, _)| *c == '}')
-                                                .unwrap();
-                                            last += 2 + (stop - start);
-                                            let code = u32::from_str_radix(&src[start..stop], 16)
-                                                .map_err(TokenizeError::IntParseError)?;
-                                            buf.push(char::from_u32(code).ok_or(
-                                                TokenizeError::InvalidCharacterCode(code as u64),
-                                            )?);
-                                        }
-                                        _ => unreachable!(),
+                                }
+                                let mut citr =
+                                    (&src[escptr + 1..]).chars().zip(escptr + 1..).peekable();
+                                last = escptr + 2;
+                                match citr.next().unwrap() {
+                                    ('0', _) => buf.push('\0'),
+                                    ('n', _) => buf.push('\n'),
+                                    ('r', _) => buf.push('\r'),
+                                    ('t', _) => buf.push('\t'),
+                                    ('"', _) => buf.push('\"'),
+                                    ('\'', _) => buf.push('\''), // this also handles '' escapes in single quote strings, the pre tokenizer checks for validity
+                                    ('x', ptr) => {
+                                        let code = u16::from_str_radix(&src[ptr + 1..ptr + 3], 16)
+                                            .map_err(TokenizeError::IntParseError)?
+                                            as u32;
+                                        last += 2;
+                                        buf.push(char::from_u32(code).ok_or(
+                                            TokenizeError::InvalidCharacterCode(code as u64),
+                                        )?)
                                     }
+                                    ('u', _) => {
+                                        // SAFETY: Validity of syntax has been verified in pre tokenization
+                                        let _ = citr.next().unwrap(); // {
+                                        let (_, start) = citr.next().unwrap();
+                                        let (_, stop) = (&src[start..])
+                                            .chars()
+                                            .zip(start..)
+                                            .find(|(c, _)| *c == '}')
+                                            .unwrap();
+                                        last += 2 + (stop - start);
+                                        let code = u32::from_str_radix(&src[start..stop], 16)
+                                            .map_err(TokenizeError::IntParseError)?;
+                                        buf.push(char::from_u32(code).ok_or(
+                                            TokenizeError::InvalidCharacterCode(code as u64),
+                                        )?);
+                                    }
+                                    _ => unreachable!(),
                                 }
                             }
                             if end > last {
