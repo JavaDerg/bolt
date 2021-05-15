@@ -1,4 +1,5 @@
-use crate::config::parser::tokenizer::{tokenize, Token::*, TokenizeError::*};
+use crate::config::parser::tokenizer::{tokenize, Token::*, TokenizeError, TokenizeErrorKind};
+use std::ops::Range;
 
 #[test]
 fn single() {
@@ -32,5 +33,13 @@ fn combined_complex() {
 fn suffix() {
     assert_eq!(tokenize("123u"), Ok(vec![Numeral(123), Suffix("u"), Eof]));
 
-    assert_eq!(tokenize("123u32"), Err(UnexpectedCharacter('3')));
+    assert!(matches!(
+        tokenize("123u32"),
+        Err(TokenizeError {
+            kind: TokenizeErrorKind::UnexpectedCharacter('3'),
+            line: 0,
+            pos: Range { start: 4, end: 5 },
+            ..
+        })
+    ));
 }
