@@ -29,8 +29,8 @@ fn combined_complex() {
 }
 
 #[test]
-fn prefix() {
-    assert_eq!(tokenize("123u"), Ok(vec![Numeral(123), Prefix("u"), Eof]));
+fn suffix() {
+    assert_eq!(tokenize("123u"), Ok(vec![Numeral(123), Suffix("u"), Eof]));
 
     assert_eq!(tokenize("123u32"), Err(UnexpectedCharacter('3')));
 }
