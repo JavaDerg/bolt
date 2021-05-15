@@ -30,12 +30,6 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-    use crate::config::parser::tokenizer::{tokenize, Token::*};
-
-    eprintln!(
-        "{}",
-        tokenize("\n\n\"you \\u{1F98A} suck\"\n123u 321\n\n").unwrap_err()
-    );
 
     let config = cfg::ServerConfig::builder(DomainSpecificConfig::new(
         cfg::load_cert_key(Path::new("public.crt"), Path::new("private.key")),
