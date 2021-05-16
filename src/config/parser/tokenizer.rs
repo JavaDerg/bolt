@@ -3,14 +3,15 @@ use std::fmt::{Debug, Display, Formatter};
 use std::mem::swap;
 use std::num::ParseIntError;
 
-use nom::AsChar;
 use smallvec::SmallVec;
+use std::collections::VecDeque;
 use std::ops::Range;
 
 pub struct Tokenizer<'a> {
     src: &'a str,
     util: Util<'a>,
     state: PreState,
+    backlog: VecDeque<Result<Token<'a>, Error>>,
 }
 
 enum PreState {
@@ -113,6 +114,7 @@ pub fn tokenize(src: &str) -> Tokenizer {
             cnext: 0,
         },
         state: PreState::Parsing,
+        backlog: VecDeque::with_capacity(16),
     }
 }
 
@@ -131,7 +133,7 @@ fn error(
         .map(|c| (0, c))
         .scan(0, |counter, (_, char)| {
             let pair = (*counter, char);
-            *counter += char.len();
+            *counter += char.len_utf8();
             Some(pair)
         })
         .peekable();
@@ -177,10 +179,11 @@ fn error(
 }
 
 macro_rules! submit {
-    ($util:expr, $state:expr) => {
+    ($main:lifetime, $util:expr, $state:expr) => {
+
         match $util.submit($state) {
-            Ok(Some(token)) => return Some(Ok(token)),
-            Err(err) => return Some(Err(err)),
+            Ok(Some(token)) => break $main Some(Ok(token)),
+            Err(err) => break $main Some(Err(err)),
             Ok(None) => (),
         }
     };
@@ -190,7 +193,10 @@ impl<'a> Iterator for Tokenizer<'a> {
     type Item = Result<Token<'a>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
+        let res = 'main: loop {
+            if let Some(item) = self.backlog.pop_front() {
+                return Some(item);
+            }
             match self.state {
                 PreState::Parsing => (),
                 PreState::Eof => {
@@ -203,14 +209,14 @@ impl<'a> Iterator for Tokenizer<'a> {
                 Some(c) => c,
                 None => {
                     self.state = PreState::Eof;
-                    submit!(self.util, State::None);
+                    submit!('main, self.util, State::None);
                     continue;
                 }
             };
             match next {
                 'a'..='z' | 'A'..='Z' => {
                     if self.util.state.is_numeral() {
-                        submit!(
+                        submit!('main,
                             self.util,
                             State::Suffix {
                                 start: self.util.current,
@@ -223,7 +229,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                         continue;
                     }
                     if !self.util.state.is_statement() {
-                        submit!(
+                        submit!('main,
                             self.util,
                             State::Statement {
                                 start: self.util.current,
@@ -234,15 +240,16 @@ impl<'a> Iterator for Tokenizer<'a> {
                 }
                 '0'..='9' => {
                     if self.util.state.is_suffix() {
-                        return Some(Err(error(
+                        self.backlog.push_back(Err(error(
                             self.src,
                             ErrorKind::UnexpectedCharacter(next),
                             self.util.current..0,
                             "A number suffix can not contain numbers",
                         )));
+                        continue 'main;
                     }
                     if !self.util.state.is_numeral() && !self.util.state.is_statement() {
-                        submit!(
+                        submit!('main,
                             self.util,
                             State::Numeral {
                                 start: self.util.current,
@@ -255,7 +262,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                     let start = self.util.current;
                     let mut escapes = SmallVec::new();
                     let mut invalid = true;
-                    while let Some(next) = self.util.next() {
+                    'str_loop: while let Some(next) = self.util.next() {
                         match next {
                             '\\' => {
                                 escapes.push(self.util.current);
@@ -270,21 +277,23 @@ impl<'a> Iterator for Tokenizer<'a> {
                                             let c = match self.util.next() {
                                                 Some(c) => c,
                                                 None => {
-                                                    return Some(Err(error(
+                                                    self.backlog.push_back(Err(error(
                                                         self.src,
                                                         ErrorKind::EarlyEof,
                                                         self.util.current..0,
                                                         "Reached EOF mid string escape",
-                                                    )))
+                                                    )));
+                                                    continue 'str_loop;
                                                 }
                                             };
-                                            if !c.is_hex_digit() {
-                                                return Some(Err(error(
+                                            if !c.is_ascii_hexdigit() {
+                                                self.backlog.push_back(Err(error(
                                                     self.src,
                                                     ErrorKind::UnexpectedCharacter(c),
                                                     self.util.current..0,
                                                     "A `\\xXX` string escape code may only use a 2 digit hex numbers as value",
                                                 )));
+                                                continue 'str_loop;
                                             }
                                         }
                                     }
@@ -294,27 +303,29 @@ impl<'a> Iterator for Tokenizer<'a> {
                                         match self.util.next() {
                                             Some('{') => (),
                                             Some(c) => {
-                                                return Some(Err(error(
+                                                self.backlog.push_back(Err(error(
                                                     self.src,
                                                     ErrorKind::UnexpectedCharacter(c),
                                                     self.util.current..0,
                                                     "`\\u{XXXXXX}` string escapes require a `{` at the beginning of the value",
                                                 )));
+                                                continue 'str_loop;
                                             }
                                             None => {
-                                                return Some(Err(error(
+                                                self.backlog.push_back(Err(error(
                                                     self.src,
                                                     ErrorKind::UnexpectedCharacter(next),
                                                     self.util.current..0,
                                                     "Reached EOF mid string escape",
                                                 )));
+                                                continue 'str_loop;
                                             }
                                         }
                                         for i in 0..6 {
                                             if let Some(c) = self.util.peek() {
-                                                if !c.is_hex_digit() {
+                                                if !c.is_ascii_hexdigit() {
                                                     if i < 2 {
-                                                        return Some(Err(
+                                                        self.backlog.push_back(Err(
                                                             error(
                                                                 self.src,
                                                                 ErrorKind::UnexpectedCharacter(c),
@@ -322,60 +333,75 @@ impl<'a> Iterator for Tokenizer<'a> {
                                                                 "`\\u{XXXXXX}` string escapes may only use a 2-6 digit hex numbers as inner value",
                                                             ),
                                                         ));
+                                                        continue 'str_loop;
                                                     }
                                                     break;
                                                 } else {
                                                     self.util.advance();
                                                 }
                                             } else {
-                                                return Some(Err(error(
+                                                self.backlog.push_back(Err(error(
                                                     self.src,
                                                     ErrorKind::EarlyEof,
                                                     self.util.current..0,
                                                     "Reached EOF mid string escape",
                                                 )));
+                                                continue 'str_loop;
                                             }
                                         }
                                         match self.util.next() {
                                             Some('}') => (),
                                             Some(c) => {
-                                                return Some(Err(error(
+                                                self.backlog.push_back(Err(error(
                                                     self.src,
                                                     ErrorKind::UnexpectedCharacter(c),
                                                     self.util.current..0,
                                                     "`\\u{XXXXXX}` string escapes require a `}` at the end of the value",
                                                 )));
+                                                continue 'str_loop;
                                             }
                                             None => {
-                                                return Some(Err(error(
+                                                self.backlog.push_back(Err(error(
                                                     self.src,
                                                     ErrorKind::EarlyEof,
                                                     self.util.current..0,
                                                     "Reached EOF mid string escape",
                                                 )));
+                                                continue 'str_loop;
                                             }
                                         }
                                     }
                                     Some(c) => {
-                                        return Some(Err(error(
+                                        self.backlog.push_back(Err(error(
                                             self.src,
                                             ErrorKind::UnexpectedCharacter(c),
                                             self.util.current..0,
                                             format!("`\\{}` is not a known string escape", c),
                                         )));
+                                        continue 'str_loop;
                                     }
                                     None => {
-                                        return Some(Err(error(
+                                        self.backlog.push_back(Err(error(
                                             self.src,
                                             ErrorKind::EarlyEof,
                                             self.util.current..0,
                                             "Reached EOF mid string escape",
                                         )));
+                                        continue 'str_loop;
                                     }
                                 }
                             }
+                            '\r' | '\n' => {
+                                self.backlog.push_back(Err(error(
+                                    self.src,
+                                    ErrorKind::UnexpectedCharacter(next),
+                                    self.util.current..0,
+                                    "Newlines are not allowed in double quote strings, use `\n` or similar",
+                                )));
+                                continue 'str_loop;
+                            }
                             '"' => {
-                                submit!(
+                                submit!('main,
                                     self.util,
                                     State::String {
                                         start,
@@ -391,18 +417,20 @@ impl<'a> Iterator for Tokenizer<'a> {
                         }
                     }
                     if invalid {
-                        return Some(Err(error(
+                        self.backlog.push_back(Err(error(
                             self.src,
                             ErrorKind::EarlyEof,
                             self.util.current..0,
                             "Reached EOF in string",
                         )));
+                        continue 'main;
                     }
                 }
                 '\'' => {
                     let start = self.util.current;
                     let mut escapes = SmallVec::new();
                     let mut invalid = true;
+
                     while let Some(char) = self.util.next() {
                         if char == '\'' {
                             if let Some('\'') = self.util.peek() {
@@ -410,7 +438,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                                 self.util.advance();
                                 continue;
                             }
-                            submit!(
+                            submit!('main,
                                 self.util,
                                 State::String {
                                     start,
@@ -424,19 +452,20 @@ impl<'a> Iterator for Tokenizer<'a> {
                         }
                     }
                     if invalid {
-                        return Some(Err(error(
+                        self.backlog.push_back(Err(error(
                             self.src,
                             ErrorKind::EarlyEof,
                             self.util.current..0,
                             "Reached EOF in string",
                         )));
+                        continue 'main;
                     }
                 }
-                '.' => submit!(self.util, State::Dot),
+                '.' => submit!('main, self.util, State::Dot),
                 '=' | '~' | '^' | '$' => {
-                    submit!(self.util, State::EqualitySwitch(EqualityType::from(next)))
+                    submit!('main, self.util, State::EqualitySwitch(EqualityType::from(next)))
                 }
-                '{' | '}' => submit!(
+                '{' | '}' => submit!('main,
                     self.util,
                     State::Block(if next == '{' {
                         BlockType::Open
@@ -448,23 +477,30 @@ impl<'a> Iterator for Tokenizer<'a> {
                     if let Some('\n') = self.util.peek() {
                         self.util.advance();
                     }
-                    submit!(self.util, State::NewLine);
+                    submit!('main, self.util, State::NewLine);
                 }
-                '\n' => submit!(self.util, State::NewLine),
+                '\n' => submit!('main, self.util, State::NewLine),
                 _ if next.is_whitespace() => {
                     if !self.util.state.is_spacer() {
-                        submit!(self.util, State::Spacer);
+                        submit!('main, self.util, State::Spacer);
                     }
                 }
                 _ => {
-                    return Some(Err(error(
+                    self.backlog.push_back(Err(error(
                         self.src,
                         ErrorKind::UnexpectedCharacter(next),
                         self.util.current..0,
                         format!("Unexpected character `{}`", next),
                     )));
+                    continue 'main;
                 }
             }
+        };
+        if !self.backlog.is_empty() {
+            self.backlog.push_back(res?);
+            self.backlog.pop_front()
+        } else {
+            res
         }
     }
 }
@@ -543,7 +579,7 @@ impl<'a> Iterator for Util<'a> {
         } else {
             let char = self.src[self.cnext..].chars().next().unwrap(); // TODO: make this nicer?
             self.current = self.cnext;
-            self.cnext += char.len();
+            self.cnext += char.len_utf8();
             Some(char)
         }
     }
