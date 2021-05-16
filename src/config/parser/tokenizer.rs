@@ -52,6 +52,7 @@ pub enum ErrorKind {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum EqualityType {
+    None,
     Equal,
     Regex,
     BeginsWith,
@@ -462,7 +463,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                     }
                 }
                 '.' => submit!('main, self.util, State::Dot),
-                '=' | '~' | '^' | '$' => {
+                '=' | '~' | '^' | '$' | '_' => {
                     submit!('main, self.util, State::EqualitySwitch(EqualityType::from(next)))
                 }
                 '{' | '}' => submit!('main,
@@ -752,6 +753,7 @@ impl From<char> for EqualityType {
             '~' => EqualityType::Regex,
             '^' => EqualityType::BeginsWith,
             '$' => EqualityType::EndsWith,
+            '_' => EqualityType::None,
             _ => panic!("Invalid indicator char type"),
         }
     }
