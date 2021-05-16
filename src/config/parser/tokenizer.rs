@@ -1,13 +1,23 @@
 use std::borrow::Cow;
-use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::mem::swap;
 use std::num::ParseIntError;
 
 use nom::AsChar;
 use smallvec::SmallVec;
-use std::iter::FromIterator;
 use std::ops::Range;
+
+pub struct Tokenizer<'a> {
+    src: &'a str,
+    util: Util<'a>,
+    state: PreState,
+}
+
+enum PreState {
+    Parsing,
+    Eof,
+    Done,
+}
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Token<'a> {
@@ -24,9 +34,8 @@ pub enum Token<'a> {
     Eof,
 }
 
-/// TODO: include location
-pub struct TokenizeError {
-    pub kind: TokenizeErrorKind,
+pub struct Error {
+    pub kind: ErrorKind,
     pub reason: String,
     pub line_raw: String,
     pub line: usize,
@@ -34,7 +43,7 @@ pub struct TokenizeError {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum TokenizeErrorKind {
+pub enum ErrorKind {
     UnexpectedCharacter(char),
     EarlyEof,
     IntParseError(ParseIntError),
@@ -55,15 +64,14 @@ pub enum BlockType {
     Close,
 }
 
-struct TokenizeUtil<'a> {
+struct Util<'a> {
     pub src: &'a str,
-    pub state: ParserState,
+    pub state: State,
     pub current: usize,
     pub cnext: usize,
-    pub tokens: Vec<Token<'a>>,
 }
 
-enum ParserState {
+enum State {
     None,
     Statement {
         start: usize,
@@ -96,252 +104,16 @@ enum StringType {
     DoubleQuote,
 }
 
-pub fn tokenize(src: &str) -> Result<Vec<Token>, TokenizeError> {
-    let mut util = TokenizeUtil {
+pub fn tokenize(src: &str) -> Result<Vec<Token>, Error> {
+    let mut util = Util {
         src,
-        state: ParserState::None,
+        state: State::None,
         current: 0,
         cnext: 0,
         tokens: Vec::with_capacity(128),
     };
-    while let Some(next) = util.next() {
-        match next {
-            'a'..='z' | 'A'..='Z' => {
-                if util.state.is_numeral() {
-                    util.submit(ParserState::Suffix {
-                        start: util.current,
-                        end: util.current,
-                    })?;
-                    continue;
-                }
-                if util.state.is_suffix() {
-                    continue;
-                }
-                if !util.state.is_statement() {
-                    util.submit(ParserState::Statement {
-                        start: util.current,
-                        end: util.current,
-                    })?;
-                }
-            }
-            '0'..='9' => {
-                if util.state.is_suffix() {
-                    return Err(error(
-                        src,
-                        TokenizeErrorKind::UnexpectedCharacter(next),
-                        util.current..0,
-                        "A number suffix can not contain numbers",
-                    ));
-                }
-                if !util.state.is_numeral() && !util.state.is_statement() {
-                    util.submit(ParserState::Numeral {
-                        start: util.current,
-                        end: util.current,
-                    })?;
-                }
-            }
-            '"' => {
-                let start = util.current;
-                let mut escapes = SmallVec::new();
-                let mut invalid = true;
-                while let Some(next) = util.next() {
-                    match next {
-                        '\\' => {
-                            escapes.push(util.current);
-                            match util.peek() {
-                                Some('0') | Some('n') | Some('r') | Some('t') | Some('"') => {
-                                    util.advance();
-                                }
-                                Some('x') => {
-                                    // \x00
-                                    util.advance();
-                                    for _ in 0..2 {
-                                        let c = util.next().ok_or(error(
-                                            src,
-                                            TokenizeErrorKind::EarlyEof,
-                                            util.current..0,
-                                            "Reached EOF mid string escape",
-                                        ))?;
-                                        if !c.is_hex_digit() {
-                                            return Err(error(
-                                                src,
-                                                TokenizeErrorKind::UnexpectedCharacter(c),
-                                                util.current..0,
-                                                "A `\\xXX` string escape code may only use a 2 digit hex numbers as value",
-                                            ));
-                                        }
-                                    }
-                                }
-                                Some('u') => {
-                                    // \u{2-6 hex digit}
-                                    util.advance(); // u
-                                    match util.next() {
-                                        Some('{') => (),
-                                        Some(c) => {
-                                            return Err(error(
-                                                src,
-                                                TokenizeErrorKind::UnexpectedCharacter(c),
-                                                util.current..0,
-                                                "`\\u{XXXXXX}` string escapes require a `{` at the beginning of the value",
-                                            ));
-                                        }
-                                        None => {
-                                            return Err(error(
-                                                src,
-                                                TokenizeErrorKind::UnexpectedCharacter(next),
-                                                util.current..0,
-                                                "Reached EOF mid string escape",
-                                            ))
-                                        }
-                                    }
-                                    for i in 0..6 {
-                                        if let Some(c) = util.peek() {
-                                            if !c.is_hex_digit() {
-                                                if i < 2 {
-                                                    return Err(
-                                                        error(
-                                                            src,
-                                                            TokenizeErrorKind::UnexpectedCharacter(c),
-                                                            util.current..0,
-                                                            "`\\u{XXXXXX}` string escapes may only use a 2-6 digit hex numbers as inner value",
-                                                        ),
-                                                    );
-                                                }
-                                                break;
-                                            } else {
-                                                util.advance();
-                                            }
-                                        } else {
-                                            return Err(error(
-                                                src,
-                                                TokenizeErrorKind::EarlyEof,
-                                                util.current..0,
-                                                "Reached EOF mid string escape",
-                                            ));
-                                        }
-                                    }
-                                    match util.next() {
-                                        Some('}') => (),
-                                        Some(c) => {
-                                            return Err(error(
-                                                src,
-                                                TokenizeErrorKind::UnexpectedCharacter(c),
-                                                util.current..0,
-                                                "`\\u{XXXXXX}` string escapes require a `}` at the end of the value",
-                                            ));
-                                        }
-                                        None => {
-                                            return Err(error(
-                                                src,
-                                                TokenizeErrorKind::EarlyEof,
-                                                util.current..0,
-                                                "Reached EOF mid string escape",
-                                            ))
-                                        }
-                                    }
-                                }
-                                Some(c) => {
-                                    return Err(error(
-                                        src,
-                                        TokenizeErrorKind::UnexpectedCharacter(c),
-                                        util.current..0,
-                                        format!("`\\{}` is not a known string escape", c),
-                                    ))
-                                }
-                                None => {
-                                    return Err(error(
-                                        src,
-                                        TokenizeErrorKind::EarlyEof,
-                                        util.current..0,
-                                        "Reached EOF mid string escape",
-                                    ))
-                                }
-                            }
-                        }
-                        '"' => {
-                            util.submit(ParserState::String {
-                                start,
-                                end: util.cnext,
-                                escapes,
-                                kind: StringType::DoubleQuote,
-                            })?;
-                            invalid = false;
-                            break;
-                        }
-                        _ => {}
-                    }
-                }
-                if invalid {
-                    return Err(error(
-                        src,
-                        TokenizeErrorKind::EarlyEof,
-                        util.current..0,
-                        "Reached EOF in string",
-                    ));
-                }
-            }
-            '\'' => {
-                let start = util.current;
-                let mut escapes = SmallVec::new();
-                let mut invalid = true;
-                while let Some(char) = util.next() {
-                    if char == '\'' {
-                        if let Some('\'') = util.peek() {
-                            escapes.push(util.current);
-                            util.advance();
-                            continue;
-                        }
-                        util.submit(ParserState::String {
-                            start,
-                            end: util.cnext,
-                            escapes,
-                            kind: StringType::SingleQuote,
-                        })?;
-                        invalid = false;
-                        break;
-                    }
-                }
-                if invalid {
-                    return Err(error(
-                        src,
-                        TokenizeErrorKind::EarlyEof,
-                        util.current..0,
-                        "Reached EOF in string",
-                    ));
-                }
-            }
-            '.' => util.submit(ParserState::Dot)?,
-            '=' | '~' | '^' | '$' => {
-                util.submit(ParserState::EqualitySwitch(EqualityType::from(next)))?
-            }
-            '{' | '}' => util.submit(ParserState::Block(if next == '{' {
-                BlockType::Open
-            } else {
-                BlockType::Close
-            }))?,
-            '\r' => {
-                if let Some('\n') = util.peek() {
-                    util.advance();
-                }
-                util.submit(ParserState::NewLine)?;
-            }
-            '\n' => util.submit(ParserState::NewLine)?,
-            _ if next.is_whitespace() => {
-                if !util.state.is_spacer() {
-                    util.submit(ParserState::Spacer)?;
-                }
-            }
-            _ => {
-                return Err(error(
-                    src,
-                    TokenizeErrorKind::UnexpectedCharacter(next),
-                    util.current..0,
-                    format!("Unexpected character `{}`", next),
-                ))
-            }
-        }
-    }
-    util.submit(ParserState::None)?;
+    while let Some(next) = util.next() {}
+    util.submit(State::None)?;
 
     util.tokens.push(Token::Eof);
 
@@ -350,10 +122,10 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, TokenizeError> {
 
 fn error(
     source: &str,
-    kind: TokenizeErrorKind,
+    kind: ErrorKind,
     mut offset: Range<usize>,
     message: impl Into<String>,
-) -> TokenizeError {
+) -> Error {
     offset.end = offset.end.max(offset.start + 1);
 
     let mut line = 0;
@@ -392,14 +164,14 @@ fn error(
     let lend = citer
         .find(|(_, c)| *c == '\r' || *c == '\n')
         .map(|(ptr, _)| ptr)
-        .unwrap_or(source.len());
+        .unwrap_or_else(|| source.len());
 
     let line_raw = &source[lstart..lend];
 
     offset.start -= lstart;
     offset.end -= lstart;
 
-    TokenizeError {
+    Error {
         kind,
         reason: message.into(),
         line_raw: String::from(line_raw),
@@ -408,7 +180,297 @@ fn error(
     }
 }
 
-impl Display for TokenizeError {
+macro_rules! submit {
+    ($util:expr, $state:expr) => {
+        match $util.submit($state) {
+            Ok(Some(token)) => return Some(Ok(token)),
+            Err(err) => return Some(Err(err)),
+            Ok(None) => (),
+        }
+    };
+}
+
+impl<'a> Iterator for Tokenizer<'a> {
+    type Item = Result<Token<'a>, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.state {
+                PreState::Parsing => (),
+                PreState::Eof => return Some(Ok(Token::Eof)),
+                PreState::Done => return None,
+            }
+            let next = match self.util.next() {
+                Some(c) => c,
+                None => {
+                    self.state = PreState::Eof;
+                    submit!(self.util, State::None);
+                    continue;
+                }
+            };
+            match next {
+                'a'..='z' | 'A'..='Z' => {
+                    if self.util.state.is_numeral() {
+                        submit!(
+                            self.util,
+                            State::Suffix {
+                                start: self.util.current,
+                                end: self.util.current,
+                            }
+                        );
+                        continue;
+                    }
+                    if self.util.state.is_suffix() {
+                        continue;
+                    }
+                    if !self.util.state.is_statement() {
+                        submit!(
+                            self.util,
+                            State::Statement {
+                                start: self.util.current,
+                                end: self.util.current,
+                            }
+                        );
+                    }
+                }
+                '0'..='9' => {
+                    if self.util.state.is_suffix() {
+                        return Some(Err(error(
+                            self.src,
+                            ErrorKind::UnexpectedCharacter(next),
+                            self.util.current..0,
+                            "A number suffix can not contain numbers",
+                        )));
+                    }
+                    if !self.util.state.is_numeral() && !self.util.state.is_statement() {
+                        submit!(
+                            self.util,
+                            State::Numeral {
+                                start: self.util.current,
+                                end: self.util.current,
+                            }
+                        );
+                    }
+                }
+                '"' => {
+                    let start = self.util.current;
+                    let mut escapes = SmallVec::new();
+                    let mut invalid = true;
+                    while let Some(next) = self.util.next() {
+                        match next {
+                            '\\' => {
+                                escapes.push(self.util.current);
+                                match self.util.peek() {
+                                    Some('0') | Some('n') | Some('r') | Some('t') | Some('"') => {
+                                        self.util.advance();
+                                    }
+                                    Some('x') => {
+                                        // \x00
+                                        self.util.advance();
+                                        for _ in 0..2 {
+                                            let c = match self.util.next() {
+                                                Some(c) => c,
+                                                None => {
+                                                    return Some(Err(error(
+                                                        self.src,
+                                                        ErrorKind::EarlyEof,
+                                                        self.util.current..0,
+                                                        "Reached EOF mid string escape",
+                                                    )))
+                                                }
+                                            };
+                                            if !c.is_hex_digit() {
+                                                return Some(Err(error(
+                                                    self.src,
+                                                    ErrorKind::UnexpectedCharacter(c),
+                                                    self.util.current..0,
+                                                    "A `\\xXX` string escape code may only use a 2 digit hex numbers as value",
+                                                )));
+                                            }
+                                        }
+                                    }
+                                    Some('u') => {
+                                        // \u{2-6 hex digit}
+                                        self.util.advance(); // u
+                                        match self.util.next() {
+                                            Some('{') => (),
+                                            Some(c) => {
+                                                return Some(Err(error(
+                                                    self.src,
+                                                    ErrorKind::UnexpectedCharacter(c),
+                                                    self.util.current..0,
+                                                    "`\\u{XXXXXX}` string escapes require a `{` at the beginning of the value",
+                                                )));
+                                            }
+                                            None => {
+                                                return Some(Err(error(
+                                                    self.src,
+                                                    ErrorKind::UnexpectedCharacter(next),
+                                                    self.util.current..0,
+                                                    "Reached EOF mid string escape",
+                                                )));
+                                            }
+                                        }
+                                        for i in 0..6 {
+                                            if let Some(c) = self.util.peek() {
+                                                if !c.is_hex_digit() {
+                                                    if i < 2 {
+                                                        return Some(Err(
+                                                            error(
+                                                                self.src,
+                                                                ErrorKind::UnexpectedCharacter(c),
+                                                                self.util.current..0,
+                                                                "`\\u{XXXXXX}` string escapes may only use a 2-6 digit hex numbers as inner value",
+                                                            ),
+                                                        ));
+                                                    }
+                                                    break;
+                                                } else {
+                                                    self.util.advance();
+                                                }
+                                            } else {
+                                                return Some(Err(error(
+                                                    self.src,
+                                                    ErrorKind::EarlyEof,
+                                                    self.util.current..0,
+                                                    "Reached EOF mid string escape",
+                                                )));
+                                            }
+                                        }
+                                        match self.util.next() {
+                                            Some('}') => (),
+                                            Some(c) => {
+                                                return Some(Err(error(
+                                                    self.src,
+                                                    ErrorKind::UnexpectedCharacter(c),
+                                                    self.util.current..0,
+                                                    "`\\u{XXXXXX}` string escapes require a `}` at the end of the value",
+                                                )));
+                                            }
+                                            None => {
+                                                return Some(Err(error(
+                                                    self.src,
+                                                    ErrorKind::EarlyEof,
+                                                    self.util.current..0,
+                                                    "Reached EOF mid string escape",
+                                                )));
+                                            }
+                                        }
+                                    }
+                                    Some(c) => {
+                                        return Some(Err(error(
+                                            self.src,
+                                            ErrorKind::UnexpectedCharacter(c),
+                                            self.util.current..0,
+                                            format!("`\\{}` is not a known string escape", c),
+                                        )));
+                                    }
+                                    None => {
+                                        return Some(Err(error(
+                                            self.src,
+                                            ErrorKind::EarlyEof,
+                                            self.util.current..0,
+                                            "Reached EOF mid string escape",
+                                        )));
+                                    }
+                                }
+                            }
+                            '"' => {
+                                submit!(
+                                    self.util,
+                                    State::String {
+                                        start,
+                                        end: self.util.cnext,
+                                        escapes,
+                                        kind: StringType::DoubleQuote,
+                                    }
+                                );
+                                invalid = false;
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                    if invalid {
+                        return Some(Err(error(
+                            self.src,
+                            ErrorKind::EarlyEof,
+                            self.util.current..0,
+                            "Reached EOF in string",
+                        )));
+                    }
+                }
+                '\'' => {
+                    let start = self.util.current;
+                    let mut escapes = SmallVec::new();
+                    let mut invalid = true;
+                    while let Some(char) = self.util.next() {
+                        if char == '\'' {
+                            if let Some('\'') = self.util.peek() {
+                                escapes.push(self.util.current);
+                                self.util.advance();
+                                continue;
+                            }
+                            submit!(
+                                self.util,
+                                State::String {
+                                    start,
+                                    end: self.util.cnext,
+                                    escapes,
+                                    kind: StringType::SingleQuote,
+                                }
+                            );
+                            invalid = false;
+                            break;
+                        }
+                    }
+                    if invalid {
+                        return Some(Err(error(
+                            self.src,
+                            ErrorKind::EarlyEof,
+                            self.util.current..0,
+                            "Reached EOF in string",
+                        )));
+                    }
+                }
+                '.' => submit!(self.util, State::Dot),
+                '=' | '~' | '^' | '$' => {
+                    submit!(self.util, State::EqualitySwitch(EqualityType::from(next)))
+                }
+                '{' | '}' => submit!(
+                    self.util,
+                    State::Block(if next == '{' {
+                        BlockType::Open
+                    } else {
+                        BlockType::Close
+                    })
+                ),
+                '\r' => {
+                    if let Some('\n') = self.util.peek() {
+                        self.util.advance();
+                    }
+                    submit!(self.util, State::NewLine);
+                }
+                '\n' => submit!(self.util, State::NewLine),
+                _ if next.is_whitespace() => {
+                    if !self.util.state.is_spacer() {
+                        submit!(self.util, State::Spacer);
+                    }
+                }
+                _ => {
+                    return Some(Err(error(
+                        self.src,
+                        ErrorKind::UnexpectedCharacter(next),
+                        self.util.current..0,
+                        format!("Unexpected character `{}`", next),
+                    )));
+                }
+            }
+        }
+    }
+}
+
+impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let Self {
             kind: _,
@@ -423,7 +485,7 @@ impl Display for TokenizeError {
     }
 }
 
-impl Debug for TokenizeError {
+impl Debug for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let Self {
             kind,
@@ -438,21 +500,21 @@ impl Debug for TokenizeError {
     }
 }
 
-impl Error for TokenizeError {}
+impl std::error::Error for Error {}
 
-impl PartialEq for TokenizeError {
+impl PartialEq for Error {
     fn eq(&self, other: &Self) -> bool {
         self.kind == other.kind
     }
 }
 
-impl<'a> TokenizeUtil<'a> {
-    pub fn submit(&mut self, next: ParserState) -> Result<(), TokenizeError> {
+impl<'a> Util<'a> {
+    pub fn submit(&mut self, next: State) -> Result<Option<Token<'a>>, Error> {
         self.state.complete(self.current);
         if let Some(token) = self.state.tokenize(next, self.src)? {
-            self.tokens.push(token);
+            return Ok(Some(token));
         }
-        Ok(())
+        Ok(None)
     }
 
     pub fn is_available(&self) -> bool {
@@ -472,7 +534,7 @@ impl<'a> TokenizeUtil<'a> {
     }
 }
 
-impl<'a> Iterator for TokenizeUtil<'a> {
+impl<'a> Iterator for Util<'a> {
     type Item = char;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -488,28 +550,24 @@ impl<'a> Iterator for TokenizeUtil<'a> {
     }
 }
 
-impl ParserState {
-    pub fn tokenize<'a>(
-        &mut self,
-        new: Self,
-        src: &'a str,
-    ) -> Result<Option<Token<'a>>, TokenizeError> {
+impl State {
+    pub fn tokenize<'a>(&mut self, new: Self, src: &'a str) -> Result<Option<Token<'a>>, Error> {
         let old = self.swap(new);
         Ok(Some(match old {
             Self::None => return Ok(None),
-            ParserState::Statement { start, end } => Token::Statement(&src[start..end]),
-            ParserState::Suffix { start, end } => Token::Suffix(&src[start..end]),
-            ParserState::Numeral { start, end } => {
+            State::Statement { start, end } => Token::Statement(&src[start..end]),
+            State::Suffix { start, end } => Token::Suffix(&src[start..end]),
+            State::Numeral { start, end } => {
                 Token::Numeral((&src[start..end]).parse().map_err(|err| {
                     error(
                         src,
-                        TokenizeErrorKind::IntParseError(err),
+                        ErrorKind::IntParseError(err),
                         start..end,
                         format!("`{}` failed to parse this as number", &src[start..end]),
                     )
                 })?)
             }
-            ParserState::String {
+            State::String {
                 start,
                 end,
                 escapes,
@@ -540,7 +598,7 @@ impl ParserState {
                                             .map_err(|err| {
                                             error(
                                                 src,
-                                                TokenizeErrorKind::IntParseError(err),
+                                                ErrorKind::IntParseError(err),
                                                 ptr + 1..ptr + 3,
                                                 format!(
                                                     "`{}` failed to parse this as hex number",
@@ -553,9 +611,7 @@ impl ParserState {
                                         buf.push(char::from_u32(code).ok_or_else(|| {
                                             error(
                                                 src,
-                                                TokenizeErrorKind::InvalidCharacterCode(
-                                                    code as u64,
-                                                ),
+                                                ErrorKind::InvalidCharacterCode(code as u64),
                                                 ptr + 1..ptr + 3,
                                                 format!(
                                                     "`{}` is not a valid UTF-8 codepoint",
@@ -578,7 +634,7 @@ impl ParserState {
                                             .map_err(|err| {
                                                 error(
                                                     src,
-                                                    TokenizeErrorKind::IntParseError(err),
+                                                    ErrorKind::IntParseError(err),
                                                     start..stop,
                                                     format!(
                                                         "`{}` failed to parse this as hex number",
@@ -589,9 +645,7 @@ impl ParserState {
                                         buf.push(char::from_u32(code).ok_or_else(|| {
                                             error(
                                                 src,
-                                                TokenizeErrorKind::InvalidCharacterCode(
-                                                    code as u64,
-                                                ),
+                                                ErrorKind::InvalidCharacterCode(code as u64),
                                                 start..stop,
                                                 format!(
                                                     "`{}` is not a valid UTF-8 codepoint",
@@ -617,19 +671,19 @@ impl ParserState {
                     }
                 }
             }
-            ParserState::Dot => Token::Dot,
-            ParserState::EqualitySwitch(switch) => Token::EqualitySwitch(switch),
-            ParserState::Block(kind) => Token::Block(kind),
-            ParserState::Spacer => Token::Spacer,
-            ParserState::NewLine => Token::NewLine,
+            State::Dot => Token::Dot,
+            State::EqualitySwitch(switch) => Token::EqualitySwitch(switch),
+            State::Block(kind) => Token::Block(kind),
+            State::Spacer => Token::Spacer,
+            State::NewLine => Token::NewLine,
         }))
     }
 
     pub fn complete(&mut self, pos: usize) {
         match self {
-            ParserState::Statement { end, .. } => *end = pos,
-            ParserState::Numeral { end, .. } => *end = pos,
-            ParserState::Suffix { end, .. } => *end = pos,
+            State::Statement { end, .. } => *end = pos,
+            State::Numeral { end, .. } => *end = pos,
+            State::Suffix { end, .. } => *end = pos,
             _ => (),
         }
     }

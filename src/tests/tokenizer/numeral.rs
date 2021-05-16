@@ -1,4 +1,4 @@
-use crate::config::parser::tokenizer::{tokenize, Token::*, TokenizeError, TokenizeErrorKind};
+use crate::config::parser::tokenizer::{tokenize, Error, ErrorKind, Token::*};
 use std::ops::Range;
 
 #[test]
@@ -35,8 +35,8 @@ fn suffix() {
 
     assert!(matches!(
         tokenize("123u32"),
-        Err(TokenizeError {
-            kind: TokenizeErrorKind::UnexpectedCharacter('3'),
+        Err(Error {
+            kind: ErrorKind::UnexpectedCharacter('3'),
             line: 0,
             pos: Range { start: 4, end: 5 },
             ..
