@@ -1,5 +1,4 @@
 use crate::config::parser::tokenizer::{tokenize, Error, ErrorKind, Token::*};
-use std::ops::Range;
 
 #[test]
 fn single() {

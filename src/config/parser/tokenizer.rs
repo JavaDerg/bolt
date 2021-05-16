@@ -26,7 +26,6 @@ pub enum Token<'a> {
     Numeral(u64),
     String { content: Cow<'a, str>, format: bool },
     Dot,
-    Equality,
     EqualitySwitch(EqualityType),
     Block(BlockType),
     Spacer,
@@ -194,7 +193,10 @@ impl<'a> Iterator for Tokenizer<'a> {
         loop {
             match self.state {
                 PreState::Parsing => (),
-                PreState::Eof => return Some(Ok(Token::Eof)),
+                PreState::Eof => {
+                    self.state = PreState::Done;
+                    return Some(Ok(Token::Eof));
+                }
                 PreState::Done => return None,
             }
             let next = match self.util.next() {
