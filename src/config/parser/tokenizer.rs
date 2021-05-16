@@ -104,20 +104,17 @@ enum StringType {
     DoubleQuote,
 }
 
-pub fn tokenize(src: &str) -> Result<Vec<Token>, Error> {
-    let mut util = Util {
+pub fn tokenize(src: &str) -> Tokenizer {
+    Tokenizer {
         src,
-        state: State::None,
-        current: 0,
-        cnext: 0,
-        tokens: Vec::with_capacity(128),
-    };
-    while let Some(next) = util.next() {}
-    util.submit(State::None)?;
-
-    util.tokens.push(Token::Eof);
-
-    Ok(util.tokens)
+        util: Util {
+            src,
+            state: State::None,
+            current: 0,
+            cnext: 0,
+        },
+        state: PreState::Parsing,
+    }
 }
 
 fn error(

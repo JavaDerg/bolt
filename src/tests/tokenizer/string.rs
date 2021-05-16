@@ -23,38 +23,61 @@ fn unit_test_macro() {
 
 #[test]
 fn basic() {
-    assert_eq!(tokenize(r#"''"#), Ok(vec![string!("", false), Eof]),);
     assert_eq!(
-        tokenize(r#"'Hello world'"#),
-        Ok(vec![string!("Hello world", false), Eof]),
+        tokenize(r#"''"#).map(|t| t.unwrap()).collect::<Vec<_>>(),
+        vec![string!("", false), Eof]
     );
     assert_eq!(
-        tokenize(r#"'123 '' test'"#),
-        Ok(vec![string!("123 ' test", false), Eof]),
+        tokenize(r#"'Hello world'"#)
+            .map(|t| t.unwrap())
+            .collect::<Vec<_>>(),
+        vec![string!("Hello world", false), Eof],
+    );
+    assert_eq!(
+        tokenize(r#"'123 '' test'"#)
+            .map(|t| t.unwrap())
+            .collect::<Vec<_>>(),
+        vec![string!("123 ' test", false), Eof],
     );
 }
 
 #[test]
 fn advanced() {
-    assert_eq!(tokenize(r#""""#), Ok(vec![string!("", true), Eof]),);
     assert_eq!(
-        tokenize(r#""Hello world""#),
-        Ok(vec![string!("Hello world", true), Eof]),
+        tokenize(r#""""#).map(|t| t.unwrap()).collect::<Vec<_>>(),
+        vec![string!("", true), Eof]
+    );
+    assert_eq!(
+        tokenize(r#""Hello world""#)
+            .map(|t| t.unwrap())
+            .collect::<Vec<_>>(),
+        vec![string!("Hello world", true), Eof],
     );
 
     assert_eq!(
-        tokenize(r#""123 \t test""#),
-        Ok(vec![string!("123 \t test", true), Eof]),
-    );
-
-    assert_eq!(tokenize(r#""\x30""#), Ok(vec![string!("0", true), Eof]),);
-    assert_eq!(
-        tokenize(r#""\x30\x31\x32\x33\x34\x35\x36\x37\x38\x39""#),
-        Ok(vec![string!("0123456789", true), Eof]),
+        tokenize(r#""123 \t test""#)
+            .map(|t| t.unwrap())
+            .collect::<Vec<_>>(),
+        vec![string!("123 \t test", true), Eof],
     );
 
     assert_eq!(
-        tokenize(r#""\u{1F98A} fox; \u{1F43A} wolf""#),
-        Ok(vec![string!("🦊 fox; 🐺 wolf", true), Eof]),
+        tokenize(r#""\x30""#)
+            .map(|t| t.unwrap())
+            .collect::<Vec<_>>(),
+        vec![string!("0", true), Eof],
+    );
+    assert_eq!(
+        tokenize(r#""\x30\x31\x32\x33\x34\x35\x36\x37\x38\x39""#)
+            .map(|t| t.unwrap())
+            .collect::<Vec<_>>(),
+        vec![string!("0123456789", true), Eof],
+    );
+
+    assert_eq!(
+        tokenize(r#""\u{1F98A} fox; \u{1F43A} wolf""#)
+            .map(|t| t.unwrap())
+            .collect::<Vec<_>>(),
+        vec![string!("🦊 fox; 🐺 wolf", true), Eof],
     );
 }

@@ -7,5 +7,8 @@ mod string;
 
 #[test]
 fn eof() {
-    assert_eq!(tokenize(""), Ok(vec![Eof]));
+    assert_eq!(
+        tokenize("").map(|t| t.unwrap()).collect::<Vec<_>>(),
+        vec![Eof]
+    );
 }
