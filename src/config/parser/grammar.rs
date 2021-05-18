@@ -1,4 +1,4 @@
-use crate::config::parser::tokenizer::{EqualityType, Token};
+use crate::config::parser::tokenizer::{BlockType, EqualityType, Token};
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::iter::Peekable;
@@ -11,18 +11,18 @@ pub enum Item<'a> {
     Command(Command<'a>),
 }
 
-pub struct Command<'a>(Key<'a>, Value<'a>, Option<Box<Block<'a>>>);
+pub struct Command<'a>(Key<'a>, SmallVec<[Value<'a>; 4]>, Option<Box<Block<'a>>>);
 pub struct Key<'a>(SmallVec<[&'a str; 4]>);
 pub struct Block<'a>(SmallVec<[Item<'a>; 8]>);
 pub enum Value<'a> {
     Statement(&'a str),
     String { content: Cow<'a, str>, format: bool },
-    Number { value: u64, prefix: Option<&'a str> },
+    Number { value: u64, suffix: Option<&'a str> },
     Equator(EqualityType),
 }
 
 impl<'a, I: Iterator<Item = Token<'a>>> GrammarIter<'a, I> {
-    pub fn read_key(&mut self) -> Option<Key<'a>> {
+    fn read_key(&mut self) -> Option<Key<'a>> {
         let mut vec = SmallVec::new();
         while let Some(Token::Spacer) = self.inner.peek() {
             let _ = self.inner.next();
@@ -39,49 +39,67 @@ impl<'a, I: Iterator<Item = Token<'a>>> GrammarIter<'a, I> {
         }
         Some(Key(vec))
     }
+
+    fn priv_next(&mut self, in_block: bool) -> Option<Item<'a>> {
+        loop {
+            let key = self.read_key()?;
+            let mut values = SmallVec::new();
+            if !matches!(self.inner.next()?, Token::Spacer) {
+                return None;
+            }
+            loop {
+                match self.inner.next() {
+                    Some(Token::Spacer) => continue,
+                    Some(Token::NewLine) => return Some(Item::Command(Command(key, values, None))),
+                    Some(Token::Statement(str)) => values.push(Value::Statement(str)),
+                    Some(Token::String { content, format }) => {
+                        values.push(Value::String { content, format })
+                    }
+                    Some(Token::Numeral(num)) => {
+                        if let Some(Token::Suffix(_)) = self.inner.peek() {
+                            values.push(Value::Number {
+                                value: num,
+                                suffix: self.inner.next().map(|i| match i {
+                                    Token::Suffix(sfx) => sfx,
+                                    _ => unreachable!(),
+                                }),
+                            })
+                        } else {
+                            values.push(Value::Number {
+                                value: num,
+                                suffix: None,
+                            });
+                        }
+                    }
+                    Some(Token::EqualitySwitch(etype)) => values.push(Value::Equator(etype)),
+                    Some(Token::Eof) | None => return None,
+                    Some(Token::Block(BlockType::Open)) => {
+                        while let Some(Token::Spacer) = self.inner.peek() {
+                            let _ = self.inner.next();
+                        }
+                        if !matches!(self.inner.next()?, Token::NewLine) {
+                            return None; // error
+                        }
+                        todo!("just recurse here")
+                    }
+                    Some(Token::Block(BlockType::Close)) => {
+                        if in_block {
+                            return None;
+                        } else {
+                            panic!("make this a proper error");
+                        }
+                    }
+                    _ => unimplemented!(),
+                }
+            }
+        }
+    }
 }
 
 impl<'a, I: Iterator<Item = Token<'a>>> Iterator for GrammarIter<'a, I> {
     type Item = Item<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let next = self.inner.next()?;
-
-        loop {
-            let key = self.read_key()?;
-            loop {
-                match self.inner.peek() {
-                    Some(Token::Spacer) => todo!(),
-                    Some(Token::NewLine) => todo!(),
-                    _ => todo!(),
-                }
-            }
-        }
-
-        todo!()
-    }
-}
-
-struct Wrapper<'a, I: Iterator<Item = &'a str>>(I);
-
-impl<'a, I: Iterator<Item = &'a str>> Iterator for Wrapper<'a, I> {
-    type Item = &'a str;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let something = self.something()?;
-        loop {
-            let other = self.0.next();
-        }
-    }
-}
-
-impl<'a, I: Iterator<Item = &'a str>> Wrapper<'a, I> {
-    fn something(&mut self) -> Option<&'a str> {
-        let next = self.0.next()?;
-        Some(if next.starts_with("_") {
-            &next[1..]
-        } else {
-            next
-        })
+        self.priv_next(false)
     }
 }
