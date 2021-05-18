@@ -12,6 +12,7 @@ pub struct Tokenizer<'a> {
     util: Util<'a>,
     state: PreState,
     backlog: VecDeque<Result<Token<'a>, Error>>,
+    blocks: SmallVec<[usize; 4]>,
 }
 
 enum PreState {
@@ -116,6 +117,7 @@ pub fn tokenize(src: &str) -> Tokenizer {
         },
         state: PreState::Parsing,
         backlog: VecDeque::with_capacity(16),
+        blocks: Default::default(),
     }
 }
 
@@ -201,6 +203,14 @@ impl<'a> Iterator for Tokenizer<'a> {
             match self.state {
                 PreState::Parsing => (),
                 PreState::Eof => {
+                    if !self.blocks.is_empty() {
+                        return Some(Err(error(
+                            self.src,
+                            ErrorKind::EarlyEof,
+                            self.blocks.pop().unwrap()..0,
+                            "fuck",
+                        )));
+                    }
                     self.state = PreState::Done;
                     return Some(Ok(Token::Eof));
                 }
@@ -469,8 +479,10 @@ impl<'a> Iterator for Tokenizer<'a> {
                 '{' | '}' => submit!('main,
                     self.util,
                     State::Block(if next == '{' {
+                        self.blocks.push(self.util.current);
                         BlockType::Open
                     } else {
+                        self.blocks.pop();
                         BlockType::Close
                     })
                 ),

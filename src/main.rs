@@ -42,7 +42,7 @@ async fn main() {
 
     let acceptor = TlsAcceptor::from(tls_config);
 
-    let listener = TcpListener::bind("0.0.0.0:8443").await.unwrap();
+    let listener = TcpListener::bind(":::8443").await.unwrap();
     // let listener = TcpListener::bind("0.0.0.0:8080").await.unwrap();
 
     /*loop {
