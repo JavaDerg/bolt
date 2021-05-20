@@ -24,8 +24,13 @@ pub enum Value<'a> {
 impl<'a, I: Iterator<Item = Token<'a>>> GrammarIter<'a, I> {
     fn read_key(&mut self) -> Option<Key<'a>> {
         let mut vec = SmallVec::new();
-        while let Some(Token::Spacer) = self.inner.peek() {
-            let _ = self.inner.next();
+        loop {
+            // It is ok to use `?` here as we can't return anything if there is nothing left
+            match self.inner.peek()? {
+                Token::Spacer | Token::NewLine => drop(self.inner.next()),
+                Token::Eof => return None,
+                _ => break,
+            }
         }
         loop {
             if let Token::Statement(str) = self.inner.next()? {
@@ -80,7 +85,11 @@ impl<'a, I: Iterator<Item = Token<'a>>> GrammarIter<'a, I> {
                         if !matches!(self.inner.next()?, Token::NewLine) {
                             return None; // error
                         }
-                        todo!("just recurse here")
+                        let vec = SmallVec::new();
+                        while Some(item) = self.priv_next(true) {
+
+                        }
+                        return Some(Item::Command(Command(key, values, Some(Box::new(Block(vec))))));
                     }
                     Some(Token::Block(BlockType::Close)) => {
                         if in_block {
@@ -99,6 +108,7 @@ impl<'a, I: Iterator<Item = Token<'a>>> GrammarIter<'a, I> {
 impl<'a, I: Iterator<Item = Token<'a>>> Iterator for GrammarIter<'a, I> {
     type Item = Item<'a>;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.priv_next(false)
     }
