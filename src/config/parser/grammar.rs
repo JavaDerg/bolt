@@ -7,18 +7,29 @@ pub struct GrammarIter<'a, I: Iterator<Item = Token<'a>>> {
     inner: Peekable<I>,
 }
 
+#[derive(Debug)]
 pub enum Item<'a> {
     Command(Command<'a>),
 }
 
+#[derive(Debug)]
 pub struct Command<'a>(Key<'a>, SmallVec<[Value<'a>; 4]>, Option<Box<Block<'a>>>);
+#[derive(Debug)]
 pub struct Key<'a>(SmallVec<[&'a str; 4]>);
+#[derive(Debug)]
 pub struct Block<'a>(SmallVec<[Item<'a>; 8]>);
+#[derive(Debug)]
 pub enum Value<'a> {
     Statement(&'a str),
     String { content: Cow<'a, str>, format: bool },
     Number { value: u64, suffix: Option<&'a str> },
     Equator(EqualityType),
+}
+
+pub fn process_semantics<'a, I: Iterator<Item = Token<'a>>>(iter: I) -> GrammarIter<'a, I> {
+    GrammarIter {
+        inner: iter.peekable(),
+    }
 }
 
 impl<'a, I: Iterator<Item = Token<'a>>> GrammarIter<'a, I> {
@@ -85,11 +96,15 @@ impl<'a, I: Iterator<Item = Token<'a>>> GrammarIter<'a, I> {
                         if !matches!(self.inner.next()?, Token::NewLine) {
                             return None; // error
                         }
-                        let vec = SmallVec::new();
-                        while Some(item) = self.priv_next(true) {
-
+                        let mut vec = SmallVec::new();
+                        while let Some(item) = self.priv_next(true) {
+                            vec.push(item);
                         }
-                        return Some(Item::Command(Command(key, values, Some(Box::new(Block(vec))))));
+                        return Some(Item::Command(Command(
+                            key,
+                            values,
+                            Some(Box::new(Block(vec))),
+                        )));
                     }
                     Some(Token::Block(BlockType::Close)) => {
                         if in_block {

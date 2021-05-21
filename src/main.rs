@@ -10,7 +10,6 @@ pub use tracing::{error, info, trace, warn};
 use tracing_futures::Instrument;
 
 use crate::cfg::{DomainSpecificConfig, ServerConfig};
-use crate::config::parser::tokenizer::Token;
 use crate::router::Router;
 use crate::service::MainService;
 
@@ -31,6 +30,20 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
+
+    let tokens = config::parser::tokenizer::tokenize(include_str!("../config/sites/default.conf"))
+        .filter_map(|t| match t {
+            Ok(token) => Some(token),
+            Err(err) => {
+                error!("{}", err);
+                panic!()
+            }
+        });
+    let mut semanticizer = config::parser::grammar::process_semantics(tokens);
+
+    for item in semanticizer {
+        info!("{:#?}", item);
+    }
 
     let config = cfg::ServerConfig::builder(DomainSpecificConfig::new(
         cfg::load_cert_key(Path::new("public.crt"), Path::new("private.key")),
