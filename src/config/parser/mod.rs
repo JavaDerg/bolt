@@ -1,2 +1,2 @@
-pub mod grammar;
-pub mod tokenizer;
+pub mod lexer;
+pub mod syntax;

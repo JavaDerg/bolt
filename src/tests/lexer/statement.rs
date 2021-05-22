@@ -1,9 +1,9 @@
-use crate::config::parser::tokenizer::{tokenize, Token::*};
+use crate::config::parser::lexer::{lex, Token::*};
 
 #[test]
 fn single() {
     assert_eq!(
-        tokenize("statement")
+        lex("statement")
             .map(|t| t.unwrap())
             .collect::<Vec<_>>(),
         vec![Statement("statement"), Eof]
@@ -13,7 +13,7 @@ fn single() {
 #[test]
 fn combined_space() {
     assert_eq!(
-        tokenize("hello world")
+        lex("hello world")
             .map(|t| t.unwrap())
             .collect::<Vec<_>>(),
         vec![Statement("hello"), Spacer, Statement("world"), Eof]
@@ -23,7 +23,7 @@ fn combined_space() {
 #[test]
 fn combined_dot() {
     assert_eq!(
-        tokenize("tls.session")
+        lex("tls.session")
             .map(|t| t.unwrap())
             .collect::<Vec<_>>(),
         vec![Statement("tls"), Dot, Statement("session"), Eof]
@@ -33,7 +33,7 @@ fn combined_dot() {
 #[test]
 fn combined_newline() {
     assert_eq!(
-        tokenize("hi\nyou").map(|t| t.unwrap()).collect::<Vec<_>>(),
+        lex("hi\nyou").map(|t| t.unwrap()).collect::<Vec<_>>(),
         vec![Statement("hi"), NewLine, Statement("you"), Eof]
     );
 }
@@ -41,7 +41,7 @@ fn combined_newline() {
 #[test]
 fn numbers() {
     assert_eq!(
-        tokenize("hi m8\n").map(|t| t.unwrap()).collect::<Vec<_>>(),
+        lex("hi m8\n").map(|t| t.unwrap()).collect::<Vec<_>>(),
         vec![Statement("hi"), Spacer, Statement("m8"), NewLine, Eof]
     )
 }

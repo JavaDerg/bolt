@@ -7,7 +7,7 @@ use smallvec::SmallVec;
 use std::collections::VecDeque;
 use std::ops::Range;
 
-pub struct Tokenizer<'a> {
+pub struct Lexer<'a> {
     src: &'a str,
     util: Util<'a>,
     state: PreState,
@@ -106,8 +106,8 @@ enum StringType {
     DoubleQuote,
 }
 
-pub fn tokenize(src: &str) -> Tokenizer {
-    Tokenizer {
+pub fn lex(src: &str) -> Lexer {
+    Lexer {
         src,
         util: Util {
             src,
@@ -192,7 +192,7 @@ macro_rules! submit {
     };
 }
 
-impl<'a> Iterator for Tokenizer<'a> {
+impl<'a> Iterator for Lexer<'a> {
     type Item = Result<Token<'a>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -640,7 +640,7 @@ impl State {
                                     ('r', _) => buf.push('\r'),
                                     ('t', _) => buf.push('\t'),
                                     ('"', _) => buf.push('\"'),
-                                    ('\'', _) => buf.push('\''), // this also handles '' escapes in single quote strings, the pre tokenizer checks for validity
+                                    ('\'', _) => buf.push('\''), // this also handles '' escapes in single quote strings, the pre lexer checks for validity
                                     ('x', ptr) => {
                                         let code = u16::from_str_radix(&src[ptr + 1..ptr + 3], 16)
                                             .map_err(|err| {

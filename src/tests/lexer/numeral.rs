@@ -1,9 +1,9 @@
-use crate::config::parser::tokenizer::{tokenize, Error, ErrorKind, Token::*};
+use crate::config::parser::lexer::{lex, Error, ErrorKind, Token::*};
 
 #[test]
 fn single() {
     assert_eq!(
-        tokenize("1234").map(|t| t.unwrap()).collect::<Vec<_>>(),
+        lex("1234").map(|t| t.unwrap()).collect::<Vec<_>>(),
         vec![Numeral(1234), Eof]
     );
 }
@@ -11,7 +11,7 @@ fn single() {
 #[test]
 fn combined_space() {
     assert_eq!(
-        tokenize("123 123").map(|t| t.unwrap()).collect::<Vec<_>>(),
+        lex("123 123").map(|t| t.unwrap()).collect::<Vec<_>>(),
         vec![Numeral(123), Spacer, Numeral(123), Eof]
     );
 }
@@ -19,7 +19,7 @@ fn combined_space() {
 #[test]
 fn combined_complex() {
     assert_eq!(
-        tokenize("123 u 321")
+        lex("123 u 321")
             .map(|t| t.unwrap())
             .collect::<Vec<_>>(),
         vec![
@@ -36,7 +36,7 @@ fn combined_complex() {
 #[test]
 fn suffix() {
     assert_eq!(
-        tokenize("123u").map(|t| t.unwrap()).collect::<Vec<_>>(),
+        lex("123u").map(|t| t.unwrap()).collect::<Vec<_>>(),
         vec![Numeral(123), Suffix("u"), Eof]
     );
 

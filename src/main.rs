@@ -31,7 +31,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let tokens = config::parser::tokenizer::tokenize(include_str!("../config/sites/default.conf"))
+    let tokens = config::parser::lexer::lex(include_str!("../config/sites/default.conf"))
         .filter_map(|t| match t {
             Ok(token) => Some(token),
             Err(err) => {
@@ -39,7 +39,7 @@ async fn main() {
                 panic!()
             }
         });
-    let mut semanticizer = config::parser::grammar::process_semantics(tokens);
+    let mut semanticizer = config::parser::syntax::analyze(tokens);
 
     for item in semanticizer {
         info!("{:#?}", item);

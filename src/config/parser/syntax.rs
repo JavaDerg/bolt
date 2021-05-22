@@ -1,4 +1,4 @@
-use crate::config::parser::tokenizer::{BlockType, EqualityType, Token};
+use crate::config::parser::lexer::{BlockType, EqualityType, Token};
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::iter::Peekable;
@@ -26,7 +26,7 @@ pub enum Value<'a> {
     Equator(EqualityType),
 }
 
-pub fn process_semantics<'a, I: Iterator<Item = Token<'a>>>(iter: I) -> GrammarIter<'a, I> {
+pub fn analyze<'a, I: Iterator<Item = Token<'a>>>(iter: I) -> GrammarIter<'a, I> {
     GrammarIter {
         inner: iter.peekable(),
     }
