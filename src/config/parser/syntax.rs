@@ -3,13 +3,8 @@ use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::iter::Peekable;
 
-pub struct GrammarIter<'a, I: Iterator<Item = Token<'a>>> {
+pub struct SyntaxAnalyzer<'a, I: Iterator<Item = Token<'a>>> {
     inner: Peekable<I>,
-}
-
-#[derive(Debug)]
-pub enum Item<'a> {
-    Command(Command<'a>),
 }
 
 #[derive(Debug)]
@@ -17,7 +12,7 @@ pub struct Command<'a>(Key<'a>, SmallVec<[Value<'a>; 4]>, Option<Box<Block<'a>>>
 #[derive(Debug)]
 pub struct Key<'a>(SmallVec<[&'a str; 4]>);
 #[derive(Debug)]
-pub struct Block<'a>(SmallVec<[Item<'a>; 8]>);
+pub struct Block<'a>(SmallVec<[Command<'a>; 8]>);
 #[derive(Debug)]
 pub enum Value<'a> {
     Statement(&'a str),
@@ -26,13 +21,13 @@ pub enum Value<'a> {
     Equator(EqualityType),
 }
 
-pub fn analyze<'a, I: Iterator<Item = Token<'a>>>(iter: I) -> GrammarIter<'a, I> {
-    GrammarIter {
+pub fn analyze<'a, I: Iterator<Item = Token<'a>>>(iter: I) -> SyntaxAnalyzer<'a, I> {
+    SyntaxAnalyzer {
         inner: iter.peekable(),
     }
 }
 
-impl<'a, I: Iterator<Item = Token<'a>>> GrammarIter<'a, I> {
+impl<'a, I: Iterator<Item = Token<'a>>> SyntaxAnalyzer<'a, I> {
     fn read_key(&mut self) -> Option<Key<'a>> {
         let mut vec = SmallVec::new();
         loop {
@@ -56,7 +51,7 @@ impl<'a, I: Iterator<Item = Token<'a>>> GrammarIter<'a, I> {
         Some(Key(vec))
     }
 
-    fn priv_next(&mut self, in_block: bool) -> Option<Item<'a>> {
+    fn priv_next(&mut self, in_block: bool) -> Option<Command<'a>> {
         loop {
             let key = self.read_key()?;
             let mut values = SmallVec::new();
@@ -66,7 +61,7 @@ impl<'a, I: Iterator<Item = Token<'a>>> GrammarIter<'a, I> {
             loop {
                 match self.inner.next() {
                     Some(Token::Spacer) => continue,
-                    Some(Token::NewLine) => return Some(Item::Command(Command(key, values, None))),
+                    Some(Token::NewLine) => return Some(Command(key, values, None)),
                     Some(Token::Statement(str)) => values.push(Value::Statement(str)),
                     Some(Token::String { content, format }) => {
                         values.push(Value::String { content, format })
@@ -100,11 +95,7 @@ impl<'a, I: Iterator<Item = Token<'a>>> GrammarIter<'a, I> {
                         while let Some(item) = self.priv_next(true) {
                             vec.push(item);
                         }
-                        return Some(Item::Command(Command(
-                            key,
-                            values,
-                            Some(Box::new(Block(vec))),
-                        )));
+                        return Some(Command(key, values, Some(Box::new(Block(vec)))));
                     }
                     Some(Token::Block(BlockType::Close)) => {
                         if in_block {
@@ -120,8 +111,8 @@ impl<'a, I: Iterator<Item = Token<'a>>> GrammarIter<'a, I> {
     }
 }
 
-impl<'a, I: Iterator<Item = Token<'a>>> Iterator for GrammarIter<'a, I> {
-    type Item = Item<'a>;
+impl<'a, I: Iterator<Item = Token<'a>>> Iterator for SyntaxAnalyzer<'a, I> {
+    type Item = Command<'a>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
