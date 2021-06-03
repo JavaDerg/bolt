@@ -4,11 +4,10 @@ use std::io::{BufRead, Read};
 use std::path::Path;
 use std::sync::Arc;
 
-use async_rustls::rustls::ClientHello;
 use async_rustls::rustls::sign::CertifiedKey;
+use async_rustls::rustls::ClientHello;
 use rustls::ResolvesServerCert;
 
-use crate::map_maybe::MapMaybeExt;
 use crate::router::Router;
 
 pub struct ServerConfig {
@@ -56,7 +55,7 @@ impl ResolvesServerCert for ServerConfig {
     fn resolve(&self, client_hello: ClientHello) -> Option<CertifiedKey> {
         client_hello
             .server_name()
-            .map_maybe(|name| {
+            .and_then(|name| {
                 let key = DomainKey::Shared(unsafe { std::mem::transmute(name) }); // FIXME: This sucks
                 let cfg = self.domain_specific.get(&key)?;
                 Some(cfg.cert.clone())
@@ -151,7 +150,7 @@ pub fn load_cert_key(certs: &Path, key: &Path) -> CertifiedKey {
                 std::fs::read(key).unwrap().as_slice(),
                 0,
             ))
-                .unwrap()
+            .unwrap()
             {
                 Some(rustls_pemfile::Item::RSAKey(key)) => break rustls::PrivateKey(key),
                 Some(rustls_pemfile::Item::PKCS8Key(key)) => break rustls::PrivateKey(key),
