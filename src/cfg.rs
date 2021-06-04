@@ -9,6 +9,7 @@ use async_rustls::rustls::ClientHello;
 use rustls::ResolvesServerCert;
 
 use crate::router::Router;
+use nom::AsBytes;
 
 pub struct ServerConfig {
     default: Arc<DomainSpecificConfig>,
@@ -56,7 +57,9 @@ impl ResolvesServerCert for ServerConfig {
         client_hello
             .server_name()
             .and_then(|name| {
-                let key = DomainKey::Shared(unsafe { std::mem::transmute(name) }); // FIXME: This sucks
+                // This solution sucks too, another useless memory allocation
+                let name = name.to_owned();
+                let key = DomainKey::Shared(AsRef::as_ref(&name).as_bytes());
                 let cfg = self.domain_specific.get(&key)?;
                 Some(cfg.cert.clone())
             })

@@ -1,6 +1,11 @@
-use crate::data::MaybeResponse;
+use crate::data::Response;
+use std::future::Future;
 
-#[async_trait::async_trait]
 pub trait Middleware {
-    async fn process(&self) -> Box<dyn MaybeResponse>;
+    fn process(&self) -> MiddlewareAction<'_>;
+}
+
+pub enum MiddlewareAction<'s> {
+    ComputeFuture(Box<dyn Future<Output = Option<Response>> + Send + 's>),
+    Direct(Option<Response>),
 }
