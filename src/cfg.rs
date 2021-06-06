@@ -9,7 +9,6 @@ use async_rustls::rustls::ClientHello;
 use rustls::ResolvesServerCert;
 
 use crate::router::Router;
-use nom::AsBytes;
 
 pub struct ServerConfig {
     default: Arc<DomainSpecificConfig>,

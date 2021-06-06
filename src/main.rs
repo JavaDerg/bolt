@@ -1,3 +1,6 @@
+#![feature(trait_alias)]
+#![feature(bool_to_option)]
+
 use std::path::Path;
 use std::sync::Arc;
 
@@ -24,6 +27,7 @@ mod sanitizer;
 mod service;
 #[cfg(test)]
 mod tests;
+mod url;
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -32,19 +36,13 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let tokens = config::parser::lexer::lex(include_str!("../config/sites/default.conf"))
-        .filter_map(|t| match t {
-            Ok(token) => Some(token),
-            Err(err) => {
-                error!("{}", err);
-                panic!()
-            }
-        });
-    let mut semanticizer = config::parser::syntax::analyze(tokens);
+    let url = url::UrlPath::parse("/hello");
+    info!("{:#?}", url);
 
-    for item in semanticizer {
-        info!("{:#?}", item);
-    }
+    info!(
+        "{:#?}",
+        url::UrlPath::parse("/hello/world/this/is/nice/hi%20bye/lol?hello=world#secret")
+    );
 
     let config = cfg::ServerConfig::builder(DomainSpecificConfig::new(
         cfg::load_cert_key(Path::new("public.crt"), Path::new("private.key")),
