@@ -1,4 +1,3 @@
-use nom::AsChar;
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::iter::Peekable;
@@ -87,7 +86,7 @@ impl<'a> Parser<'a> {
     fn next(&mut self) -> Option<char> {
         let (i, c) = self.iter.next()?;
         self.pos = i;
-        self.next = self.pos + c.len();
+        self.next = self.pos + c.len_utf8();
         Some(c)
     }
 
@@ -120,7 +119,7 @@ impl<'a> Parser<'a> {
                 '/' | '?' => self.next(),
                 '%' => {
                     let _ = self.next();
-                    let mut filter = m_lim(2, |c: char| c.is_hex_digit());
+                    let mut filter = m_lim(2, |c: char| c.is_ascii_hexdigit());
                     let rs = self.pos;
                     while filter(self.peek().ok_or(())?) {
                         let _ = self.next();
@@ -155,7 +154,7 @@ impl<'a> Parser<'a> {
                 '/' | '?' | '#' => break,
                 '%' => {
                     let _ = self.next();
-                    let hex = self.take(m_lim(2, |c: char| c.is_hex_digit()));
+                    let hex = self.take(m_lim(2, |c: char| c.is_ascii_hexdigit()));
                     if hex.len() != 2 {
                         return Err(());
                     }
