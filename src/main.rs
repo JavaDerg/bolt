@@ -13,7 +13,6 @@ pub use tracing::{error, info, trace, warn};
 use tracing_futures::Instrument;
 
 use crate::cfg::{DomainSpecificConfig, ServerConfig};
-use crate::router::Router;
 use crate::service::MainService;
 
 mod cfg;
@@ -22,8 +21,7 @@ mod data;
 mod middleware;
 mod net;
 mod responder;
-mod router;
-mod sanitizer;
+mod responses;
 mod service;
 #[cfg(test)]
 mod tests;

@@ -6,11 +6,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 pub trait Middleware {
-    fn process<'rqs>(
-        self: Arc<Self>,
-        req: &'rqs mut Request,
-        rb: &'rqs mut ResponseBuilder,
-    ) -> MiddlewareAction<'rqs>;
+    fn process(self: Arc<Self>, req: Request, rb: &mut ResponseBuilder) -> MiddlewareAction;
 }
 
 pub enum MiddlewareAction<'s> {

@@ -1,16 +1,22 @@
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::iter::Peekable;
+use std::ops::Deref;
 use std::str::CharIndices;
 
 trait Filter = FnMut(char) -> bool;
 type CowStr<'a> = Cow<'a, str>;
 
+pub struct OwnedUrlPath {
+    path: String,
+    parts: UrlPath<'static>,
+}
+
 #[derive(Debug)]
 pub struct UrlPath<'a> {
-    complete: &'a str,
-    segments: SmallVec<[CowStr<'a>; 8]>,
-    query: Option<&'a str>,
+    pub complete: &'a str,
+    pub segments: SmallVec<[CowStr<'a>; 8]>,
+    pub query: Option<&'a str>,
 }
 
 struct Parser<'a> {
@@ -24,6 +30,26 @@ enum CheckResult {
     Empty,
     Pop,
     Ok,
+}
+
+impl OwnedUrlPath {
+    pub fn new(path: impl Into<String>) -> Result<Self, ()> {
+        let path = path.into();
+        // SAFETY: UrlPath will be dropped with path, the lifetime gets downgraded before being accessible to the user
+        let rp: &'static str = unsafe { std::mem::transmute(path.as_ref()) };
+        Ok(Self {
+            path,
+            parts: UrlPath::parse(rp)?,
+        })
+    }
+}
+
+impl<'a> Deref for OwnedUrlPath {
+    type Target = UrlPath<'a>;
+
+    fn deref(&'a self) -> &Self::Target {
+        &self.parts
+    }
 }
 
 impl<'a> UrlPath<'a> {

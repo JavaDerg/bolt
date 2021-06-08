@@ -1,49 +1,7 @@
-use std::convert::Infallible;
+use crate::data::{Request, Response};
 use std::error::Error;
 
-use hyper::{Body, Request, Response};
-
-use crate::responder::{FileResponder, Responder, StaticBinaryResponder};
-
-pub struct Router {
-    routes: Vec<(String, Box<dyn Responder + 'static + Send + Sync>)>,
-}
-
-impl Router {
-    pub fn new() -> Self {
-        Self {
-            routes: vec![
-                (
-                    String::from("/test"),
-                    Box::new(StaticBinaryResponder {
-                        data: b"Hallo Welt!",
-                        content_type: "text/plain",
-                    }),
-                ),
-                (String::from("/"), Box::new(FileResponder)),
-            ],
-        }
-    }
-
-    pub async fn route(&self, request: Request<Body>) -> Result<Response<Body>, Infallible> {
-        let request_path = request.uri().path().to_string();
-        let route = self
-            .routes
-            .iter()
-            .find(|(path, ..)| request_path.starts_with(path))
-            .map(|(_, responder)| responder);
-        if route.is_none() {
-            return Ok(_404(&request));
-        }
-        let route = route.unwrap();
-        Ok(match route.respond(request).await {
-            Ok(response) => response,
-            Err(err) => _500(err),
-        })
-    }
-}
-
-pub fn _404(request: &Request<Body>) -> Response<Body> {
+pub fn _404(request: &Request) -> Response {
     Response::builder()
         .status(404)
         .header("Content-Type", "text/html")
@@ -67,7 +25,7 @@ pub fn _404(request: &Request<Body>) -> Response<Body> {
         .unwrap()
 }
 
-pub fn _500(error: Box<dyn Error>) -> Response<Body> {
+pub fn _500(error: Box<dyn Error>) -> Response {
     Response::builder()
         .status(500)
         .header("Content-Type", "text/html")
