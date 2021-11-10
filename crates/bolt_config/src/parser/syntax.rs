@@ -1,4 +1,4 @@
-use crate::config::parser::lexer::{BlockType, EqualityType, Token};
+use crate::parser::lexer::{BlockType, EqualityType, Token};
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::iter::Peekable;

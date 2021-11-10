@@ -77,20 +77,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bolt_config"
-version = "0.1.0"
-dependencies = [
- "smallvec",
-]
-
-[[package]]
-name = "bolt_url"
-version = "0.1.0"
-dependencies = [
- "smallvec",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

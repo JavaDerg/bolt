@@ -1,13 +1,13 @@
+// TODO: Add tests!!!
+
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::iter::Peekable;
 use std::marker::PhantomPinned;
 use std::ops::{Deref, Not};
 use std::pin::Pin;
-use std::ptr::NonNull;
 use std::str::CharIndices;
 
-trait Filter = FnMut(char) -> bool;
 type CowStr<'a> = Cow<'a, str>;
 
 pub struct OwnedUrlPath(Pin<Box<InnerOwnedUrlPath>>);
@@ -45,16 +45,19 @@ impl OwnedUrlPath {
             parts: None,
             _pin: PhantomPinned,
         });
-        let paths = UrlPath::parse(&boxed.path)?;
+
+        // TODO: check if this is UB
+        let paths = unsafe { std::mem::transmute(UrlPath::parse(&boxed.path)?) };
         unsafe {
             let mut_ref: Pin<&mut InnerOwnedUrlPath> = Pin::as_mut(&mut boxed);
             Pin::get_unchecked_mut(mut_ref).parts = Some(paths);
         }
-        Self(boxed)
+        Ok(Self(boxed))
     }
 
     pub fn inner(&self) -> &UrlPath {
-        self.0.parts.as_ref().unwrap()
+        // TODO: check if this is UB
+        unsafe { std::mem::transmute(self.0.parts.as_ref().unwrap()) }
     }
 }
 
@@ -86,6 +89,7 @@ impl<'a> UrlPath<'a> {
                 _ => return Err(()),
             }
         }
+
         Ok(Self {
             complete: url,
             segments: buf,
@@ -105,7 +109,7 @@ fn read_seg<'a>(parser: &mut Parser<'a>, buf: &mut SmallVec<[CowStr<'a>; 8]>) ->
 }
 
 fn check_segment(seg: &str) -> CheckResult {
-    if seg.is_empty() {
+    if seg.is_empty() || seg == "." {
         CheckResult::Empty
     } else if seg == ".." {
         CheckResult::Pop
@@ -132,7 +136,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn take(&mut self, mut filter: impl Filter) -> &'a str {
+    fn take(&mut self, mut filter: impl FnMut(char) -> bool) -> &'a str {
         let start = self.next;
         while let Some(c) = self.peek() {
             if !filter(c) {
@@ -198,9 +202,11 @@ impl<'a> Parser<'a> {
                 _ => return Err(()),
             }
             let read = self.take(m_pchar_lim);
-            buf.reserve(read.len());
-            for b in read.as_bytes().iter() {
-                buf.push(*b);
+            if !read.is_empty() {
+                buf.reserve(read.len());
+                for b in read.as_bytes().iter() {
+                    buf.push(*b);
+                }
             }
         }
         String::from_utf8(buf).map_err(|_| ())
@@ -208,7 +214,7 @@ impl<'a> Parser<'a> {
 }
 
 #[inline]
-fn m_lim(len: usize, mut filter: impl Filter) -> impl Filter {
+fn m_lim(len: usize, mut filter: impl FnMut(char) -> bool) -> impl FnMut(char) -> bool {
     let mut count = 0;
     move |c| {
         if count >= len {

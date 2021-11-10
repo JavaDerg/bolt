@@ -1,5 +1,3 @@
-#![feature(trait_alias)]
-
 use std::path::Path;
 use std::sync::Arc;
 
@@ -16,16 +14,10 @@ use crate::middleware::router::Router;
 use crate::service::MainService;
 
 mod cfg;
-mod config;
-mod data;
 mod middleware;
-mod net;
-mod responder;
-mod responses;
 mod service;
 #[cfg(test)]
 mod tests;
-mod url;
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
