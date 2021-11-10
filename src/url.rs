@@ -1,15 +1,21 @@
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::iter::Peekable;
+use std::marker::PhantomPinned;
 use std::ops::Deref;
+use std::pin::Pin;
+use std::ptr::NonNull;
 use std::str::CharIndices;
 
 trait Filter = FnMut(char) -> bool;
 type CowStr<'a> = Cow<'a, str>;
 
-pub struct OwnedUrlPath {
+pub struct OwnedUrlPath(Pin<Box<InnerOwnedUrlPath>>);
+
+struct InnerOwnedUrlPath {
     path: String,
-    parts: UrlPath<'static>,
+    parts: Option<UrlPath<'static>>,
+    _pin: PhantomPinned,
 }
 
 #[derive(Debug)]
@@ -34,21 +40,21 @@ enum CheckResult {
 
 impl OwnedUrlPath {
     pub fn new(path: impl Into<String>) -> Result<Self, ()> {
-        let path = path.into();
-        // SAFETY: UrlPath will be dropped with path, the lifetime gets downgraded before being accessible to the user
-        let rp: &'static str = unsafe { std::mem::transmute(path.as_ref()) };
-        Ok(Self {
-            path,
-            parts: UrlPath::parse(rp)?,
-        })
+        let mut boxed = Box::pin(InnerOwnedUrlPath {
+            path: path.into(),
+            parts: None,
+            _pin: PhantomPinned,
+        });
+        let paths = UrlPath::parse(&boxed.path)?;
+        unsafe {
+            let mut_ref: Pin<&mut InnerOwnedUrlPath> = Pin::as_mut(&mut boxed);
+            Pin::get_unchecked_mut(mut_ref).parts = Some(paths);
+        }
+        Self(boxed)
     }
-}
 
-impl<'a> Deref for OwnedUrlPath {
-    type Target = UrlPath<'a>;
-
-    fn deref(&'a self) -> &Self::Target {
-        &self.parts
+    pub fn inner(&self) -> &UrlPath {
+        self.0.parts.as_ref().unwrap()
     }
 }
 
