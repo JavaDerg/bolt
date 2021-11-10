@@ -183,7 +183,6 @@ fn error(
 
 macro_rules! submit {
     ($main:lifetime, $util:expr, $state:expr) => {
-
         match $util.submit($state) {
             Ok(Some(token)) => break $main Some(Ok(token)),
             Err(err) => break $main Some(Err(err)),
