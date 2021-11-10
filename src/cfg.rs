@@ -8,7 +8,7 @@ use async_rustls::rustls::sign::CertifiedKey;
 use async_rustls::rustls::ClientHello;
 use rustls::ResolvesServerCert;
 
-use crate::router::Router;
+use crate::middleware::router::Router;
 
 pub struct ServerConfig {
     default: Arc<DomainSpecificConfig>,

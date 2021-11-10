@@ -22,7 +22,7 @@ pub struct Routes {
 #[derive(Clone)]
 pub enum Route {
     None,
-    Middleware(Arc<dyn Middleware>),
+    Middleware(Arc<dyn Middleware + Send + Sync>),
 }
 
 impl Middleware for Router {

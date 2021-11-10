@@ -1,5 +1,4 @@
 #![feature(trait_alias)]
-#![feature(bool_to_option)]
 
 use std::path::Path;
 use std::sync::Arc;
@@ -13,6 +12,7 @@ pub use tracing::{error, info, trace, warn};
 use tracing_futures::Instrument;
 
 use crate::cfg::{DomainSpecificConfig, ServerConfig};
+use crate::middleware::router::Router;
 use crate::service::MainService;
 
 mod cfg;
@@ -44,7 +44,7 @@ async fn main() {
 
     let config = cfg::ServerConfig::builder(DomainSpecificConfig::new(
         cfg::load_cert_key(Path::new("public.crt"), Path::new("private.key")),
-        Router::new(),
+        todo!(),
     ))
     .finish();
 

@@ -4,8 +4,6 @@ use std::path::Path;
 use async_trait::async_trait;
 use hyper::{Body, Request, Response};
 
-use crate::sanitizer::sanitize_request_path;
-
 #[async_trait]
 pub trait Responder {
     async fn respond(&self, request: Request<Body>) -> Result<Response<Body>, Box<dyn Error>>;
@@ -30,7 +28,7 @@ impl Responder for StaticBinaryResponder {
 #[async_trait]
 impl Responder for FileResponder {
     async fn respond(&self, request: Request<Body>) -> Result<Response<Body>, Box<dyn Error>> {
-        let path = sanitize_request_path(&request)?;
+        let path = todo!(); //sanitize_request_path(&request)?;
         let mut path = path.path();
         if path.starts_with('/') {
             path = &path[1..];
@@ -40,7 +38,8 @@ impl Responder for FileResponder {
             path = path.join("index.html");
         }
         if !path.exists() {
-            return Ok(crate::router::_404(&request));
+            //return Ok(crate::router::_404(&request));
+            todo!("new 404 system");
         }
         let file = tokio::fs::read(&path).await?;
         let mime = mime_guess::from_path(&path)

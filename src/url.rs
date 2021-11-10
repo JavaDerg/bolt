@@ -2,7 +2,7 @@ use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::iter::Peekable;
 use std::marker::PhantomPinned;
-use std::ops::Deref;
+use std::ops::{Deref, Not};
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::str::CharIndices;
@@ -166,7 +166,10 @@ impl<'a> Parser<'a> {
             };
         }
         let params = &self.data[start..self.next];
-        Ok((!params.is_empty()).then_some(params))
+        Ok(match params.is_empty().not() {
+            true => Some(params),
+            false => None,
+        })
     }
 
     fn read_segment(&mut self) -> Result<CowStr<'a>, ()> {
