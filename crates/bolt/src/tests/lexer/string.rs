@@ -62,9 +62,7 @@ fn advanced() {
     );
 
     assert_eq!(
-        lex(r#""\x30""#)
-            .map(|t| t.unwrap())
-            .collect::<Vec<_>>(),
+        lex(r#""\x30""#).map(|t| t.unwrap()).collect::<Vec<_>>(),
         vec![string!("0", true), Eof],
     );
     assert_eq!(

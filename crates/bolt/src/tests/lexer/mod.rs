@@ -7,8 +7,5 @@ mod string;
 
 #[test]
 fn eof() {
-    assert_eq!(
-        lex("").map(|t| t.unwrap()).collect::<Vec<_>>(),
-        vec![Eof]
-    );
+    assert_eq!(lex("").map(|t| t.unwrap()).collect::<Vec<_>>(), vec![Eof]);
 }

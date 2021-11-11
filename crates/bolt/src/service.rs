@@ -4,8 +4,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use hyper::{Body, Request, Response};
 use hyper::service::Service;
+use hyper::{Body, Request, Response};
 
 use crate::cfg::DomainSpecificConfig;
 
@@ -23,7 +23,7 @@ impl Service<Request<Body>> for MainService {
     type Response = Response<Body>;
     type Error = Infallible;
     type Future =
-    Pin<Box<dyn Future<Output=Result<Response<Body>, Infallible>> + 'static + Send>>;
+        Pin<Box<dyn Future<Output = Result<Response<Body>, Infallible>> + 'static + Send>>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))

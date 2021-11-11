@@ -3,9 +3,7 @@ use crate::config::parser::lexer::{lex, Token::*};
 #[test]
 fn single() {
     assert_eq!(
-        lex("statement")
-            .map(|t| t.unwrap())
-            .collect::<Vec<_>>(),
+        lex("statement").map(|t| t.unwrap()).collect::<Vec<_>>(),
         vec![Statement("statement"), Eof]
     );
 }
@@ -13,9 +11,7 @@ fn single() {
 #[test]
 fn combined_space() {
     assert_eq!(
-        lex("hello world")
-            .map(|t| t.unwrap())
-            .collect::<Vec<_>>(),
+        lex("hello world").map(|t| t.unwrap()).collect::<Vec<_>>(),
         vec![Statement("hello"), Spacer, Statement("world"), Eof]
     );
 }
@@ -23,9 +19,7 @@ fn combined_space() {
 #[test]
 fn combined_dot() {
     assert_eq!(
-        lex("tls.session")
-            .map(|t| t.unwrap())
-            .collect::<Vec<_>>(),
+        lex("tls.session").map(|t| t.unwrap()).collect::<Vec<_>>(),
         vec![Statement("tls"), Dot, Statement("session"), Eof]
     );
 }

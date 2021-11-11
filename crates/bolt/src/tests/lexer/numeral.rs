@@ -19,9 +19,7 @@ fn combined_space() {
 #[test]
 fn combined_complex() {
     assert_eq!(
-        lex("123 u 321")
-            .map(|t| t.unwrap())
-            .collect::<Vec<_>>(),
+        lex("123 u 321").map(|t| t.unwrap()).collect::<Vec<_>>(),
         vec![
             Numeral(123),
             Spacer,

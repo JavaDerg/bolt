@@ -87,6 +87,7 @@ dependencies = [
 name = "bolt_url"
 version = "0.1.0"
 dependencies = [
+ "once_cell",
  "smallvec",
 ]
 
