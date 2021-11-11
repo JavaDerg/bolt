@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 smallvec = "1.7.0"
+once_cell = "1.8.0"

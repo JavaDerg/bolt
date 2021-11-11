@@ -1,5 +1,11 @@
 // TODO: Add tests!!!
 
+///! implemented according to https://www.ietf.org/rfc/rfc3986.txt
+
+#[cfg(test)]
+mod tests;
+
+use once_cell::sync::OnceCell;
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::iter::Peekable;
@@ -20,9 +26,11 @@ struct InnerOwnedUrlPath {
 
 #[derive(Debug)]
 pub struct UrlPath<'a> {
-    pub complete: &'a str,
-    pub segments: SmallVec<[CowStr<'a>; 8]>,
-    pub query: Option<&'a str>,
+    complete: &'a str,
+    sanitized: OnceCell<CowStr<'a>>,
+    pure: bool,
+    segments: SmallVec<[CowStr<'a>; 8]>,
+    query: Option<&'a str>,
 }
 
 struct Parser<'a> {
@@ -73,12 +81,12 @@ impl<'a> UrlPath<'a> {
         let mut query = None;
 
         parser.optional('/');
-        read_seg(&mut parser, &mut buf)?;
+        let mut pure = read_seg(&mut parser, &mut buf)?;
         loop {
             match parser.peek() {
                 Some('/') => {
                     let _ = parser.next();
-                    read_seg(&mut parser, &mut buf)?;
+                    pure &= read_seg(&mut parser, &mut buf)?;
                 }
                 Some('?') => {
                     let _ = parser.next();
@@ -92,20 +100,97 @@ impl<'a> UrlPath<'a> {
 
         Ok(Self {
             complete: url,
+            sanitized: OnceCell::new(),
+            pure,
             segments: buf,
             query,
         })
     }
+
+    pub fn original_path(&self) -> &str {
+        self.complete
+    }
+
+    pub fn sanitized_path(&self) -> &str {
+        self.sanitized
+            .get_or_init(|| {
+                self.pure
+                    .then(|| Cow::Borrowed(self.complete))
+                    .unwrap_or_else(|| Cow::Owned(self.sanitized()))
+            })
+            .as_ref()
+    }
+
+    pub fn segments(&self) -> &[CowStr] {
+        self.segments.as_slice()
+    }
+
+    pub fn query(&self) -> Option<&str> {
+        self.query
+    }
+
+    fn sanitized(&self) -> String {
+        let mut buffer = String::new();
+        self.segments.iter().for_each(|str| {
+            buffer.push('/');
+            if let CowStr::Borrowed(borrow) = str {
+                buffer.push_str(*borrow);
+                return;
+            }
+            let mut parser = Parser {
+                data: str.as_ref(),
+                iter: str.char_indices().peekable(),
+                pos: 0,
+                next: 0,
+            };
+            loop {
+                let str = parser.take(m_pchar_lim);
+                if str.is_empty() && parser.peek().is_none() {
+                    break;
+                } else if str.is_empty() {
+                    let char = parser.next().unwrap();
+                    let len = char.len_utf8();
+                    buffer.reserve(len * 2 + 1);
+                    buffer.push('%');
+                    let char = char as u32;
+                    for i in (0..len).rev() {
+                        let byte = (char >> i * 8 & 0xFF) as u8;
+                        let (b1, b2) = (byte >> 4, byte & 0xF);
+                        buffer.push(as_hex_digit(b1));
+                        buffer.push(as_hex_digit(b2));
+                    }
+                    continue;
+                }
+                buffer.push_str(str);
+            }
+        });
+        buffer
+    }
 }
 
-fn read_seg<'a>(parser: &mut Parser<'a>, buf: &mut SmallVec<[CowStr<'a>; 8]>) -> Result<(), ()> {
-    let seg = parser.read_segment()?;
-    match check_segment(seg.as_ref()) {
-        CheckResult::Empty => (),
-        CheckResult::Pop => drop(buf.pop()),
-        CheckResult::Ok => buf.push(seg),
+fn as_hex_digit(b: u8) -> char {
+    match b {
+        0..=9 => (b'0' + b) as char,
+        10..=15 => (b'A' + b) as char,
+        _ => panic!("Out of range"),
     }
-    Ok(())
+}
+
+fn read_seg<'a>(parser: &mut Parser<'a>, buf: &mut SmallVec<[CowStr<'a>; 8]>) -> Result<bool, ()> {
+    let seg = parser.read_segment()?;
+    let borrowed = matches!(&seg, Cow::Borrowed(_));
+    let pure = match check_segment(seg.as_ref()) {
+        CheckResult::Empty => false,
+        CheckResult::Pop => {
+            let _ = buf.pop();
+            false
+        }
+        CheckResult::Ok => {
+            buf.push(seg);
+            true
+        }
+    };
+    Ok(pure && borrowed)
 }
 
 fn check_segment(seg: &str) -> CheckResult {
@@ -151,6 +236,7 @@ impl<'a> Parser<'a> {
         let start = self.next;
         while let Some(c) = self.peek() {
             let _ = match c {
+                // ignore hash, it's not meant for the client
                 '#' => break,
                 '/' | '?' => self.next(),
                 '%' => {
