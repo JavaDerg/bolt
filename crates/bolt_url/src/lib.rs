@@ -8,10 +8,8 @@ mod tests;
 use once_cell::sync::OnceCell;
 use smallvec::SmallVec;
 use std::borrow::Cow;
-use std::fmt::Write;
 use std::iter::Peekable;
 use std::marker::PhantomPinned;
-use std::ops::{Deref, Not};
 use std::pin::Pin;
 use std::str::CharIndices;
 
@@ -162,7 +160,7 @@ fn hex_encode(input: &str, mut filter: impl FnMut(char) -> bool, buffer: &mut St
 
     let mut str = parser.take(&mut filter);
     if str.len() == input.len() {
-        buffer.write_str(str);
+        buffer.push_str(str);
         return;
     }
 
