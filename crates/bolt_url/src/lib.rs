@@ -8,6 +8,7 @@ mod tests;
 use once_cell::sync::OnceCell;
 use smallvec::SmallVec;
 use std::borrow::Cow;
+use std::fmt::Write;
 use std::iter::Peekable;
 use std::marker::PhantomPinned;
 use std::ops::{Deref, Not};
@@ -30,7 +31,7 @@ pub struct UrlPath<'a> {
     sanitized: OnceCell<CowStr<'a>>,
     pure: bool,
     segments: SmallVec<[CowStr<'a>; 8]>,
-    query: Option<&'a str>,
+    query: Option<CowStr<'a>>,
 }
 
 struct Parser<'a> {
@@ -80,8 +81,8 @@ impl<'a> UrlPath<'a> {
         let mut buf = SmallVec::<[CowStr<'a>; 8]>::new();
         let mut query = None;
 
-        parser.optional('/');
-        let mut pure = read_seg(&mut parser, &mut buf)?;
+        let mut pure = parser.optional('/');
+        pure &= read_seg(&mut parser, &mut buf)?;
         loop {
             match parser.peek() {
                 Some('/') => {
@@ -91,6 +92,7 @@ impl<'a> UrlPath<'a> {
                 Some('?') => {
                     let _ = parser.next();
                     query = parser.take_query()?;
+                    pure &= query.as_ref().map(|c| matches!(c, Cow::Borrowed(_))).unwrap_or(true);
                     break;
                 }
                 Some('#') | None => break,
@@ -126,7 +128,7 @@ impl<'a> UrlPath<'a> {
     }
 
     pub fn query(&self) -> Option<&str> {
-        self.query
+        self.query.as_ref().map(|c| c.as_ref())
     }
 
     fn sanitized(&self) -> String {
@@ -137,41 +139,67 @@ impl<'a> UrlPath<'a> {
                 buffer.push_str(*borrow);
                 return;
             }
-            let mut parser = Parser {
-                data: str.as_ref(),
-                iter: str.char_indices().peekable(),
-                pos: 0,
-                next: 0,
-            };
-            loop {
-                let str = parser.take(m_pchar_lim);
-                if str.is_empty() && parser.peek().is_none() {
-                    break;
-                } else if str.is_empty() {
-                    let char = parser.next().unwrap();
-                    let len = char.len_utf8();
-                    buffer.reserve(len * 2 + 1);
-                    buffer.push('%');
-                    let char = char as u32;
-                    for i in (0..len).rev() {
-                        let byte = (char >> i * 8 & 0xFF) as u8;
-                        let (b1, b2) = (byte >> 4, byte & 0xF);
-                        buffer.push(as_hex_digit(b1));
-                        buffer.push(as_hex_digit(b2));
-                    }
-                    continue;
-                }
-                buffer.push_str(str);
-            }
+            hex_encode(str.as_ref(), m_pchar_lim, &mut buffer);
         });
+        if let Some(query) = &self.query {
+            if query.is_empty() {
+                return buffer;
+            }
+            buffer.push('?');
+            hex_encode(query.as_ref(), m_query, &mut buffer);
+        }
         buffer
+    }
+}
+
+fn hex_encode(input: &str, mut filter: impl FnMut(char) -> bool, buffer: &mut String) {
+    let mut parser = Parser {
+        data: input,
+        iter: input.char_indices().peekable(),
+        pos: 0,
+        next: 0,
+    };
+
+    let mut str = parser.take(&mut filter);
+    if str.len() == input.len() {
+        buffer.write_str(str);
+        return;
+    }
+
+    buffer.reserve(input.len());
+    for i in 0.. {
+        if i != 0 {
+            str = parser.take(&mut filter);
+        }
+        if str.is_empty() && parser.peek().is_none() {
+            break;
+        } else if str.is_empty() {
+            let char = parser.next().unwrap();
+            let len = char.len_utf8();
+
+            let mut buf = [0u8; 4];
+            char.encode_utf8(&mut buf[..]);
+
+            buffer.reserve(len * 3 - 1);
+            for i in 0..len {
+                let byte = buf[i];
+                let (b1, b2) = (byte >> 4, byte & 0xF);
+
+                buffer.push('%');
+                buffer.push(as_hex_digit(b1));
+                buffer.push(as_hex_digit(b2));
+            }
+            continue;
+        } else {
+            buffer.push_str(str);
+        }
     }
 }
 
 fn as_hex_digit(b: u8) -> char {
     match b {
         0..=9 => (b'0' + b) as char,
-        10..=15 => (b'A' + b) as char,
+        10..=15 => (b'A' + b - 10) as char,
         _ => panic!("Out of range"),
     }
 }
@@ -215,9 +243,12 @@ impl<'a> Parser<'a> {
         self.iter.peek().map(|(_, c)| *c)
     }
 
-    fn optional(&mut self, c: char) {
+    fn optional(&mut self, c: char) -> bool {
         if self.peek() == Some(c) {
             let _ = self.next();
+            true
+        } else {
+            false
         }
     }
 
@@ -232,34 +263,38 @@ impl<'a> Parser<'a> {
         &self.data[start..self.next]
     }
 
-    fn take_query(&mut self) -> Result<Option<&'a str>, ()> {
-        let start = self.next;
-        while let Some(c) = self.peek() {
-            let _ = match c {
-                // ignore hash, it's not meant for the client
-                '#' => break,
-                '/' | '?' => self.next(),
-                '%' => {
-                    let _ = self.next();
-                    let mut filter = m_lim(2, |c: char| c.is_ascii_hexdigit());
-                    let rs = self.pos;
-                    while filter(self.peek().ok_or(())?) {
-                        let _ = self.next();
-                    }
-                    if self.pos - rs != 2 {
-                        return Err(());
-                    }
-                    continue;
-                }
-                _ if m_pchar_lim(c) => self.next(),
-                _ => return Err(()),
+    fn take_query(&mut self) -> Result<Option<CowStr<'a>>, ()> {
+        let str = self.take(m_query);
+        if self.peek() != Some('%') {
+            return if str.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(CowStr::Borrowed(str)))
             };
         }
-        let params = &self.data[start..self.next];
-        Ok(match params.is_empty().not() {
-            true => Some(params),
-            false => None,
-        })
+        let mut buffer = Vec::from(str);
+        loop {
+            while let Some('%') = self.peek() {
+                let _ = self.next();
+                let hex = self.take(m_lim(2, |c: char| c.is_ascii_hexdigit()));
+                if hex.len() != 2 {
+                    return Err(());
+                }
+                buffer.push(u8::from_str_radix(hex, 16).unwrap());
+            }
+            let str = self.take(m_query);
+            if str.len() == 0 {
+                if self.peek() != Some('%') {
+                    break;
+                }
+                continue;
+            }
+            buffer.extend_from_slice(str.as_bytes());
+        }
+
+        let query = String::from_utf8(buffer).map_err(|_| ())?;
+
+         Ok(Some(Cow::Owned(query)))
     }
 
     fn read_segment(&mut self) -> Result<CowStr<'a>, ()> {
@@ -336,6 +371,14 @@ fn m_sub_delims(c: char) -> bool {
         c,
         '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '='
     )
+}
+
+#[inline]
+fn m_query(c: char) -> bool {
+    match c {
+        '/' | '?' => true,
+        _ => m_pchar_lim(c),
+    }
 }
 
 /*
