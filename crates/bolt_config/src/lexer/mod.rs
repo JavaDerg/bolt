@@ -1,4 +1,4 @@
-use crate::config::parser::lexer::{lex, Token::*};
+use crate::parser::lexer::{lex, Token::*};
 
 mod newline;
 mod numeral;

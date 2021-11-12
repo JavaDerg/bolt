@@ -1,4 +1,4 @@
-use crate::config::parser::lexer::{lex, Token::*};
+use crate::parser::lexer::{lex, Token::*};
 use std::borrow::Cow;
 
 macro_rules! string {

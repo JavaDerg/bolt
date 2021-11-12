@@ -1,4 +1,4 @@
-use crate::config::parser::lexer::{lex, Error, ErrorKind, Token::*};
+use crate::parser::lexer::{lex, Token::*};
 
 #[test]
 fn single() {
