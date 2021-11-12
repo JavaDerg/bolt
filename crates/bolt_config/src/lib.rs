@@ -1,3 +1,3 @@
 pub mod parser;
 #[cfg(test)]
-mod lexer;
+mod tests;

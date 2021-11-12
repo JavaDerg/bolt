@@ -639,7 +639,7 @@ impl State {
                                     ('r', _) => buf.push('\r'),
                                     ('t', _) => buf.push('\t'),
                                     ('"', _) => buf.push('\"'),
-                                    ('\'', _) => buf.push('\''), // this also handles '' escapes in single quote strings, the pre lexer checks for validity
+                                    ('\'', _) => buf.push('\''), // this also handles '' escapes in single quote strings, the pre tests checks for validity
                                     ('x', ptr) => {
                                         let code = u16::from_str_radix(&src[ptr + 1..ptr + 3], 16)
                                             .map_err(|err| {
