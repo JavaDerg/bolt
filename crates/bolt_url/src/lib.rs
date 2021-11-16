@@ -90,7 +90,10 @@ impl<'a> UrlPath<'a> {
                 Some('?') => {
                     let _ = parser.next();
                     query = parser.take_query()?;
-                    pure &= query.as_ref().map(|c| matches!(c, Cow::Borrowed(_))).unwrap_or(true);
+                    pure &= query
+                        .as_ref()
+                        .map(|c| matches!(c, Cow::Borrowed(_)))
+                        .unwrap_or(true);
                     break;
                 }
                 Some('#') | None => break,
@@ -179,8 +182,7 @@ fn hex_encode(input: &str, mut filter: impl FnMut(char) -> bool, buffer: &mut St
             char.encode_utf8(&mut buf[..]);
 
             buffer.reserve(len * 3 - 1);
-            for i in 0..len {
-                let byte = buf[i];
+            for byte in buf.iter().take(len) {
                 let (b1, b2) = (byte >> 4, byte & 0xF);
 
                 buffer.push('%');
@@ -281,7 +283,7 @@ impl<'a> Parser<'a> {
                 buffer.push(u8::from_str_radix(hex, 16).unwrap());
             }
             let str = self.take(m_query);
-            if str.len() == 0 {
+            if str.is_empty() {
                 if self.peek() != Some('%') {
                     break;
                 }
@@ -292,7 +294,7 @@ impl<'a> Parser<'a> {
 
         let query = String::from_utf8(buffer).map_err(|_| ())?;
 
-         Ok(Some(Cow::Owned(query)))
+        Ok(Some(Cow::Owned(query)))
     }
 
     fn read_segment(&mut self) -> Result<CowStr<'a>, ()> {
