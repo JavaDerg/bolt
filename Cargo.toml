@@ -3,4 +3,7 @@ members = [
     "crates/bolt",
     "crates/bolt_config",
     "crates/bolt_url",
+    "crates/bolt_middleware",
+    "crates/bolt_http",
+    "crates/bolt_fs",
 ]
