@@ -55,26 +55,37 @@ fn escape_join(base: impl Into<PathBuf>, append: &Path, fs_depth: usize) -> Path
     base
 }
 
+impl RelativeFs {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self {
+            root: path.into(),
+            depth: 0,
+        }
+    }
+}
+
 #[async_trait]
 impl VirtFs for RelativeFs {
     async fn read_dir(
         &self,
         path: &Path,
-    ) -> std::io::Result<Box<dyn Stream<Item = std::io::Result<Box<dyn VirtDirEntry>>>>> {
+    ) -> std::io::Result<
+        Pin<Box<dyn Stream<Item = std::io::Result<Pin<Box<dyn VirtDirEntry>>>> + Unpin>>,
+    > {
         tokio::fs::read_dir(escape_join(&self.root, path, self.depth))
             .await
             .map(|stream| {
-                Box::new(ReadDirStream {
+                Box::pin(ReadDirStream {
                     rd: stream,
                     w_meta: None,
-                }) as Box<dyn Stream<Item = _>>
+                }) as Pin<Box<dyn Stream<Item = _> + Unpin>>
             })
     }
 
-    async fn open(&self, path: &Path) -> std::io::Result<Box<dyn VirtFile>> {
+    async fn open(&self, path: &Path) -> std::io::Result<Pin<Box<dyn VirtFile>>> {
         tokio::fs::File::open(escape_join(&self.root, path, self.depth))
             .await
-            .map(|file| Box::new(file) as Box<dyn VirtFile>)
+            .map(|file| Pin::new(Box::new(file) as Box<dyn VirtFile>))
     }
 
     async fn enter(&self, path: &Path, new_root: bool) -> Self {
@@ -124,7 +135,7 @@ impl VirtFs for RelativeFs {
 impl VirtFile for File {}
 
 impl Stream for ReadDirStream {
-    type Item = std::io::Result<Box<dyn VirtDirEntry>>;
+    type Item = std::io::Result<Pin<Box<dyn VirtDirEntry>>>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
@@ -149,7 +160,7 @@ impl Stream for ReadDirStream {
                 Err(err) => return Poll::Ready(Some(Err(err))),
             };
             break match (meta.is_dir(), meta.is_file()) {
-                (dir, file) if dir != file => Poll::Ready(Some(Ok(Box::new(VirtEntry {
+                (dir, file) if dir != file => Poll::Ready(Some(Ok(Box::pin(VirtEntry {
                     entry: item,
                     is_dir: dir,
                 })))),
