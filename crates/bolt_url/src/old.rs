@@ -1,9 +1,10 @@
+// TODO: Add tests!!!
+
 ///! implemented according to https://www.ietf.org/rfc/rfc3986.txt
-pub mod old;
+
 #[cfg(test)]
 mod tests;
 
-use aho_corasick::{AhoCorasick, AhoCorasickBuilder, Match};
 use once_cell::sync::OnceCell;
 use smallvec::SmallVec;
 use std::borrow::Cow;
@@ -14,24 +15,15 @@ use std::str::CharIndices;
 
 type CowStr<'a> = Cow<'a, str>;
 
-lazy_static::lazy_static! {
-    static ref PATTERN: AhoCorasick = {
-        AhoCorasickBuilder::new().dfa(true).build([b"/", b"?", b"#", b"%"])
-    };
-}
-
-const SLASH: usize = 0;
-const QUERY: usize = 1;
-const HASH: usize = 2;
-const PERC: usize = 3;
-
 pub struct OwnedUrlPath(Pin<Box<InnerOwnedUrlPath>>);
+
 struct InnerOwnedUrlPath {
     path: String,
     parts: Option<UrlPath<'static>>,
     _pin: PhantomPinned,
 }
 
+#[derive(Debug)]
 pub struct UrlPath<'a> {
     complete: &'a str,
     sanitized: OnceCell<CowStr<'a>>,
@@ -78,55 +70,44 @@ impl OwnedUrlPath {
 
 impl<'a> UrlPath<'a> {
     pub fn parse(url: &'a str) -> Result<UrlPath<'a>, ()> {
-        let mut urlb = url.as_bytes();
-        if url.is_empty() || (url.len() == 1 && urlb[0] == b'/') {
-            return Ok(UrlPath {
-                complete: url,
-                sanitized: Default::default(),
-                pure: !url.is_empty(),
-                segments: Default::default(),
-                query: None,
-            });
-        }
-        if urlb[0] == b'/' {
-            urlb = &urlb[1..];
-        }
+        let mut parser = Parser {
+            data: url,
+            iter: url.char_indices().peekable(),
+            pos: 0,
+            next: 0,
+        };
+        let mut buf = SmallVec::<[CowStr<'a>; 8]>::new();
+        let mut query = None;
 
-        let mut segments = SmallVec::<[(&[u8], bool); 8]>::new();
-
-        let mut first = true;
-        let mut qmark: Option<usize> = None;
-        let mut hash: Option<usize> = None;
-        let mut dirty = false;
-        let mut f_dirty = false;
-        let mut last: Option<Match> = None;
-
-        for mtch in PATTERN.find_iter(urlb) {
-            if mtch.pattern() == HASH {
-                hash = Some(mtch.start());
-                break;
-            }
-            if mtch.pattern() == PERC {
-                if first {
-                    f_dirty = true;
-                } else {
-                    dirty = true;
+        let mut pure = parser.optional('/');
+        pure &= read_seg(&mut parser, &mut buf)?;
+        loop {
+            match parser.peek() {
+                Some('/') => {
+                    let _ = parser.next();
+                    pure &= read_seg(&mut parser, &mut buf)?;
                 }
-                continue;
-            }
-            if qmark.is_some() {
-                continue;
-            } else if mtch.pattern() == QUERY {
-                qmark = Some(mtch.start());
-            }
-
-            if first {
-                segments.push((&urlb[..mtch.start()], f_dirty));
-                first = false;
+                Some('?') => {
+                    let _ = parser.next();
+                    query = parser.take_query()?;
+                    pure &= query
+                        .as_ref()
+                        .map(|c| matches!(c, Cow::Borrowed(_)))
+                        .unwrap_or(true);
+                    break;
+                }
+                Some('#') | None => break,
+                _ => return Err(()),
             }
         }
 
-        todo!()
+        Ok(Self {
+            complete: url,
+            sanitized: OnceCell::new(),
+            pure,
+            segments: buf,
+            query,
+        })
     }
 
     pub fn original_path(&self) -> &str {
