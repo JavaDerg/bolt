@@ -1,10 +1,6 @@
 // TODO: Add tests!!!
 
 ///! implemented according to https://www.ietf.org/rfc/rfc3986.txt
-
-#[cfg(test)]
-mod tests;
-
 use once_cell::sync::OnceCell;
 use smallvec::SmallVec;
 use std::borrow::Cow;
