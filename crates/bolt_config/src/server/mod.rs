@@ -1,3 +1,14 @@
+//! # Server config module
+//!
+//! ## Domain resolution:
+//! ```not_rust
+//! exact match
+//!   -> aho corasick matching
+//!     -> regex matching
+//!       -> default route
+//! ```
+//!
+
 mod error;
 
 use aho_corasick::AhoCorasick;
@@ -42,18 +53,35 @@ impl DomainResolvedConfigs {
     }
 
     fn aho_coresick_resolve(&self, domain: &str) -> Option<SiteSpecificConfig> {
+        /*
+        quick disclaimer, aho corasick is a multi string search algorithm
+        that means we specify a certain amount of matchable strings, we call that set S and a string we want to search X
+        the aho corasick algorithm will try to find any match of the members of S in X
+        aho corasick has a time complexity of O(len(X) + len(S) + len(matches))
+        */
+
         let ac = self.0.aho_coresick.as_ref()?;
         let mut res_mtch = None;
 
         for mtch in ac.find_iter(domain) {
+            // This check makes sure the matching domain is aligned to the end of the input
             if mtch.end() != domain.len() {
                 continue;
-            } else if mtch.start() == 0 {
+            }
+            // if the start of the match is 0 it means we have a exact match
+            else if mtch.start() == 0 {
                 res_mtch = Some(mtch);
                 break;
-            } else if domain.as_bytes()[mtch.start() - 1] != b'.' {
+            }
+            // if it isn't a exact match we check if we matched to a higher level domain
+            // by verifying if the domain starts with a dot before the match
+            else if domain.as_bytes()[mtch.start() - 1] != b'.' {
                 continue;
-            } else if let Some(res) = &res_mtch {
+            }
+            // if all is true we will select the lowest level match, that means
+            // `sub.domain.tld` will be preferred over `domain.tld`
+            // this check only applies if we already found a match
+            else if let Some(res) = &res_mtch {
                 if mtch.start() < res.start() {
                     res_mtch = Some(mtch);
                 }
