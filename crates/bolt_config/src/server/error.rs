@@ -11,6 +11,13 @@ pub enum ParseError {
     Parse(ErrorBundle),
 }
 
+#[derive(Debug, Error)]
+#[error(display = "Error parsing the server config")]
+pub enum ConfigBuilderError {
+    #[error(display = "Invalid regex: {}", _0)]
+    Regex(regex::Error),
+}
+
 pub struct ErrorBundle(pub Vec<Error>);
 
 impl Debug for ErrorBundle {

@@ -1,9 +1,9 @@
+use bolt_http::{Request, Response};
 use std::future::Future;
 use std::mem::swap;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use bolt_http::{Request, Response};
 
 pub trait Middleware: Sync {
     fn process(self: Arc<Self>, req: Request) -> MiddlewareAction<'static>;
@@ -34,7 +34,6 @@ impl<'s> Future for MiddlewareAction<'s> {
             MiddlewareAction::Direct(val) => return Poll::Ready(val),
             MiddlewareAction::Depleted => panic!("Future called twice"),
         }
-
 
         Poll::Pending
     }

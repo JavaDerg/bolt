@@ -1,7 +1,3 @@
-pub struct Request {
+pub struct Request {}
 
-}
-
-pub struct Response {
-
-}
+pub struct Response {}

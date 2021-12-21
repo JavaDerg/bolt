@@ -17,6 +17,7 @@ pub use error::ParseError;
 use regex::RegexSet;
 use std::net::IpAddr;
 use std::sync::Arc;
+use crate::server::error::ConfigBuilderError;
 
 /// Fast concurrent hashmap
 type Fchm<K, V> = DashMap<K, V, fxhash::FxBuildHasher>;
@@ -32,8 +33,8 @@ pub struct DomainResolvedConfigs(Arc<InnerDomainResolvedConfigs>);
 struct InnerDomainResolvedConfigs {
     exact: Fchm<String, SiteSpecificConfig>,
 
-    aho_coresick: Option<AhoCorasick>,
-    aho_coresick_resolution: Vec<SiteSpecificConfig>,
+    aho_corasick: Option<AhoCorasick>,
+    aho_corasick_resolution: Vec<SiteSpecificConfig>,
 
     regex_set: Option<RegexSet>,
     regex_resolution: Vec<SiteSpecificConfig>,
@@ -41,18 +42,33 @@ struct InnerDomainResolvedConfigs {
     default: Option<SiteSpecificConfig>,
 }
 
+#[derive(Default)]
+pub struct DomainResolveConfigsBuilder {
+    exact: Fchm<String, SiteSpecificConfig>,
+    aho_corasick: Vec<(String, SiteSpecificConfig)>,
+    regex_set: Vec<(String, SiteSpecificConfig)>,
+}
+
 impl DomainResolvedConfigs {
-    pub fn resolve(&self, domain: &str) -> Option<SiteSpecificConfig> {
+    pub fn builder() -> DomainResolveConfigsBuilder {
+        DomainResolveConfigsBuilder::default()
+    }
+
+    pub fn resolve(&self, domain: Option<&str>) -> Option<SiteSpecificConfig> {
+        let domain = match domain {
+            Some(domain) => domain,
+            None => return self.0.default.clone(),
+        };
         self.0
             .exact
             .get(domain)
             .map(|rf| rf.value().clone())
-            .or_else(|| self.aho_coresick_resolve(domain))
+            .or_else(|| self.aho_corasick_resolve(domain))
             .or_else(|| self.regex_resolve(domain))
             .or_else(|| self.0.default.clone())
     }
 
-    fn aho_coresick_resolve(&self, domain: &str) -> Option<SiteSpecificConfig> {
+    fn aho_corasick_resolve(&self, domain: &str) -> Option<SiteSpecificConfig> {
         /*
         quick disclaimer, aho corasick is a multi string search algorithm
         that means we specify a certain amount of matchable strings, we call that set S and a string we want to search X
@@ -60,7 +76,7 @@ impl DomainResolvedConfigs {
         aho corasick has a time complexity of O(len(X) + len(S) + len(matches))
         */
 
-        let ac = self.0.aho_coresick.as_ref()?;
+        let ac = self.0.aho_corasick.as_ref()?;
         let mut res_mtch = None;
 
         for mtch in ac.find_iter(domain) {
@@ -92,13 +108,36 @@ impl DomainResolvedConfigs {
         }
         let mtch = res_mtch?;
 
-        self.0.aho_coresick_resolution.get(mtch.pattern()).cloned()
+        self.0.aho_corasick_resolution.get(mtch.pattern()).cloned()
     }
 
     fn regex_resolve(&self, domain: &str) -> Option<SiteSpecificConfig> {
         let rx = self.0.regex_set.as_ref()?;
         let index = rx.matches(domain).iter().next()?;
         self.0.regex_resolution.get(index).cloned()
+    }
+}
+
+impl DomainResolveConfigsBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn exact(&mut self, mtch: String, cfg: SiteSpecificConfig) -> Result<&mut self, ConfigBuilderError>{
+        self.exact.insert(mtch, cfg);
+        todo!()
+    }
+
+    pub fn ends_with(&mut self, mtch: String, cfg: SiteSpecificConfig) -> Result<&mut self, ConfigBuilderError> {
+        self.aho_corasick.push((mtch, cfg));
+        todo!()
+    }
+
+    pub fn regex(&mut self, regex: String, cfg: SiteSpecificConfig) -> Result<&mut self, ConfigBuilderError> {
+        // Test for valid regex
+        let _ = regex::Regex::new(&regex)?;
+        self.regex_set.push((regex, cfg));
+        Ok(self)
     }
 }
 
