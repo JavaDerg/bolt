@@ -1,7 +1,0 @@
-[package]
-name = "bolt_middleware"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-bolt_http = { path = "../bolt_http" }

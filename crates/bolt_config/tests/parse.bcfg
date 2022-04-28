@@ -1,0 +1,5 @@
+string 'string'
+format_string "format_string"
+
+numbers 1 -1 1.1 -1.1 1suffix
+

@@ -4,11 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-smallvec = "1.7.0"
-bolt_fs = { path = "../bolt_fs" }
-tokio = { version = "1.13.0", features = ["io-util", "full"] }
-err-derive = "0.3.0"
-dashmap = "4.0.2"
-fxhash = "0.2.1"
-aho-corasick = "0.7.18"
-regex = "1.5.4"
+nom = "7.1.1"

@@ -1,115 +1,53 @@
-use std::path::Path;
-use std::sync::Arc;
+use hyper::body::HttpBody;
+use std::net::{SocketAddr:w
+};
+use tokio::net::{lookup_host, TcpListener, TcpStream};
 
-use async_rustls::TlsAcceptor;
-use hyper::server::conn::Http;
-use rustls::{KeyLog, NoClientAuth};
-use tokio::net::TcpListener;
-use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-pub use tracing::{error, info, trace, warn};
-use tracing_futures::Instrument;
+mod cli;
 
-use crate::cfg::{DomainSpecificConfig, ServerConfig};
-use crate::middleware::router::Router;
-use crate::service::MainService;
+fn main() {
+    let cpus = num_cpus::get();
 
-mod cfg;
-mod middleware;
-mod service;
-#[cfg(test)]
-mod tests;
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .worker_threads(cpus)
+        .build()
+        .expect("Unable to build tokio runtime")
+        .block_on(start());
+}
 
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+async fn start() {}
 
-#[tokio::main]
-async fn main() {
-    tracing_subscriber::fmt::init();
+#[derive(thiserror::Error, Debug)]
+enum ListenError {
+    #[error("Unable to bind to {0}")]
+    BindFailure(std::io::Error, SocketAddr),
+    #[error("Unable to listen on {0}")]
+    AcceptFailure(std::io::Error, SocketAddr),
+}
 
-    let url = url::UrlPath::parse("/hello");
-    info!("{:#?}", url);
-
-    info!(
-        "{:#?}",
-        url::UrlPath::parse("/hello/world/this/is/nice/hi%20bye/lol?hello=world#secret")
-    );
-
-    let config = cfg::ServerConfig::builder(DomainSpecificConfig::new(
-        cfg::load_cert_key(Path::new("public.crt"), Path::new("private.key")),
-        todo!(),
-    ))
-    .finish();
-
-    let tls_config = make_ssl_config(config.clone());
-
-    let acceptor = TlsAcceptor::from(tls_config);
-
-    let listener = TcpListener::bind(":::8443").await.unwrap();
-    // let listener = TcpListener::bind("0.0.0.0:8080").await.unwrap();
-
-    /*loop {
-        let (stream, peer_addr) = listener.accept().await.unwrap();
-
-        let cfg = mod.clone();
-
-        tokio::spawn(
-            async move {
-                let dsc = cfg.default();
-
-                let service = MainService::new(dsc);
-
-                let _ = Http::new()
-                    .http1_keep_alive(true)
-                    .serve_connection(stream, service)
-                    .await;
-            }i
-            .instrument(tracing::info_span!("client", "{}", peer_addr.to_string())),
-        );
-    }*/
+async fn listen(addr: SocketAddr) -> Result<(), ListenError> {
+    let mut listener = TcpListener::bind(addr)
+        .await
+        .map_err(|err| ListenError::BindFailure(err, addr))?;
 
     loop {
-        let (stream, peer_addr) = listener.accept().await.unwrap();
-        let acceptor = acceptor.clone();
+        let (mut stream, addr) = listener
+            .accept()
+            .await
+            .map_err(|err| ListenError::AcceptFailure(err, addr))?;
 
-        let cfg = config.clone();
-
-        tokio::spawn(
-            async move {
-                let stream = acceptor.accept(stream.compat()).await;
-                if stream.is_err() {
-                    warn!("Received error: {}", stream.unwrap_err());
-                    return;
-                }
-                let stream = stream.unwrap();
-                let host = stream.get_ref().1.get_sni_hostname();
-                let dsc = host.map_or_else(|| cfg.default(), |host| cfg.get(host.as_bytes()));
-
-                let service = MainService::new(dsc);
-
-                let _ = Http::new().serve_connection(stream.compat(), service).await;
-            }
-            .instrument(tracing::info_span!("client", "{}", peer_addr.to_string())),
-        );
+        tokio::spawn(async move {
+            let tls = check_for_tls(&mut stream).await;
+        });
     }
+
+    Ok(())
 }
 
-fn make_ssl_config(s_cfg: Arc<ServerConfig>) -> Arc<rustls::ServerConfig> {
-    let client_auth = NoClientAuth::new();
-    let mut config = rustls::ServerConfig::new(client_auth);
+async fn check_for_tls(stream: &mut TcpStream) -> std::io::Result<bool> {
+    let mut buf = [0; 1];
+    stream.peek(&mut buf[..]).await?;
 
-    config.cert_resolver = s_cfg;
-    config.ticketer = rustls::Ticketer::new();
-    config.set_persistence(rustls::ServerSessionMemoryCache::new(256));
-    config.set_protocols(&[Vec::from(&b"http/1.1"[..]), Vec::from(&b"h2"[..])]);
-    config.key_log = Arc::new(Logger);
-
-    Arc::new(config)
-}
-
-struct Logger;
-
-impl KeyLog for Logger {
-    fn log(&self, label: &str, client_random: &[u8], secret: &[u8]) {
-        trace!("{}:\n\t{:?}\n\t{:?}", label, client_random, secret);
-    }
+    Ok(buf[0] == 0x16)
 }
