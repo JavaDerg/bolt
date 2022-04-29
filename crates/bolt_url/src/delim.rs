@@ -1,11 +1,9 @@
-use smallvec::SmallVec;
-
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
-fn find_border(url: &str) -> (Option<usize>, Option<usize>) {
+fn find_border(url: &str) -> (Option<usize>, Option<usize>, bool) {
     if is_x86_feature_detected!("sse2") {
         unsafe { find_border_sse2(url.as_bytes()) }
     } else {
@@ -18,13 +16,15 @@ fn find_border(url: &str) -> (Option<usize>, Option<usize>) {
 /// SAFETY: length of string is verified, only 16 byte blocks are read, fallback mode for >16 pieces
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "sse2")]
-unsafe fn find_border_sse2(url: &[u8]) -> (Option<usize>, Option<usize>) {
+unsafe fn find_border_sse2(url: &[u8]) -> (Option<usize>, Option<usize>, bool) {
     let mut query_loc = None;
+    let mut proc_flag = false;
 
     let mut temp = [0u8; 16];
 
     let hash = _mm_set1_epi8(b'#' as i8);
     let query = _mm_set1_epi8(b'?' as i8);
+    let proc = _mm_set1_epi8(b'%' as i8);
 
     let url_ptr = url.as_ptr();
 
@@ -50,18 +50,33 @@ unsafe fn find_border_sse2(url: &[u8]) -> (Option<usize>, Option<usize>) {
         let mask_hash = _mm_cmpeq_epi8(invec, hash);
         let mask_i32_hash = _mm_movemask_epi8(mask_hash);
 
+        let mask_proc = _mm_cmpeq_epi8(invec, proc);
+        let mask_i32_proc = _mm_movemask_epi8(mask_proc);
+
+        // TODO: possibly unsound
+        if mask_i32_proc != 0
+            && (mask_i32_hash == 0
+                || mask_i32_hash.trailing_zeros() >= mask_i32_proc.trailing_ones())
+        {
+            proc_flag = true;
+        }
+
         if mask_i32_query != 0 && query_loc.is_none() {
             query_loc = Some(i + mask_i32_query.trailing_zeros() as usize);
         }
 
         if mask_i32_hash != 0 {
-            return (query_loc, Some(i + mask_i32_hash.trailing_zeros() as usize));
+            return (
+                query_loc,
+                Some(i + mask_i32_hash.trailing_zeros() as usize),
+                proc_flag,
+            );
         }
     }
-    (query_loc, None)
+    (query_loc, None, proc_flag)
 }
 
-fn find_border_fallback(url: &[u8], start: usize) -> (Option<usize>, Option<usize>) {
+fn find_border_fallback(url: &[u8], start: usize) -> (Option<usize>, Option<usize>, bool) {
     let mut query_loc = None;
     for i in start..url.len() {
         if query_loc.is_none() && url[i] == b'?' {

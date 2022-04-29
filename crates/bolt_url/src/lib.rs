@@ -1,10 +1,11 @@
 #[cfg(test)]
 mod tests;
 
-mod border;
+mod delim;
 ///! implemented according to https://www.ietf.org/rfc/rfc3986.txt
 pub mod old;
 mod slash;
+
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, Match};
 use std::borrow::Cow;
 use std::marker::PhantomPinned;
@@ -21,6 +22,13 @@ struct InnerOwnedUrlPath {
 
 pub struct UrlPath<'a> {
     complete: &'a str,
+    // contains hex encoding?
+    flags: UrlFlags,
+}
+
+pub struct UrlFlags {
+    /// `true` if the url contains hex encoded characters
+    pub has_hex: bool,
 }
 
 /*
