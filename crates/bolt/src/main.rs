@@ -1,6 +1,5 @@
 use hyper::body::HttpBody;
-use std::net::{SocketAddr:w
-};
+use std::net::SocketAddr;
 use tokio::net::{lookup_host, TcpListener, TcpStream};
 
 mod cli;
