@@ -1,5 +1,5 @@
 use std::io::{Error, IoSlice};
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -8,6 +8,8 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinHandle;
 use tokio_rustls::server::TlsStream;
 use tokio_rustls::TlsAcceptor;
+use tower::{Service, ServiceExt};
+use tracing::error;
 
 mod cli;
 mod tls;
@@ -24,7 +26,11 @@ fn main() {
         .block_on(start());
 }
 
-async fn start() {}
+async fn start() {
+    if let Err(err) = listen(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 1337)).await {
+        error!("{}", err);
+    }
+}
 
 #[derive(thiserror::Error, Debug)]
 enum ListenError {
@@ -32,6 +38,16 @@ enum ListenError {
     BindFailure(std::io::Error, SocketAddr),
     #[error("Unable to listen on {0}")]
     AcceptFailure(std::io::Error, SocketAddr),
+    #[error("Io error: {0}")]
+    IoError(#[from] std::io::Error),
+}
+
+#[derive(thiserror::Error, Debug)]
+enum ConnError {
+    #[error("Io error: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Http error: {0}")]
+    HttpError(#[from] hyper::Error),
 }
 
 async fn listen(addr: SocketAddr) -> Result<(), ListenError> {
@@ -42,24 +58,25 @@ async fn listen(addr: SocketAddr) -> Result<(), ListenError> {
     let config = tls::mk_config();
     let acceptor = Arc::new(TlsAcceptor::from(config.clone()));
 
+    let mut handler = layers::raw::UpgradeService::new(acceptor);
+
     loop {
-        let (mut stream, addr) = listener
+        let (stream, _) = listener
             .accept()
             .await
             .map_err(|err| ListenError::AcceptFailure(err, addr))?;
 
-        let acceptor = acceptor.clone();
-        let jh: JoinHandle<std::io::Result<()>> = tokio::spawn(async move {
-            let tls = check_for_tls(&mut stream).await?;
-
-            let stream = if tls {
-                EitherStream::Tls(acceptor.accept(stream).await?)
-            } else {
-                EitherStream::Tcp(stream)
-            };
-
-            Ok(())
-        });
+        let future = handler.ready().await?.call(stream);
+        let jh: JoinHandle<Result<(), ConnError>> =
+            tokio::task::spawn(async move {
+                let request = future.await?;
+                layers::http::RawWebService {}
+                    .ready()
+                    .await?
+                    .call(request)
+                    .await?;
+                Ok(())
+            });
     }
 
     Ok(())

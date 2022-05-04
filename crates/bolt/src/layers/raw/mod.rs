@@ -8,7 +8,7 @@ use tokio_rustls::TlsAcceptor;
 use tower::Service;
 use crate::layers::raw::stream::EitherStream;
 
-mod stream;
+pub mod stream;
 
 pub struct UpgradeService {
     tls_acceptor: Arc<TlsAcceptor>,
@@ -24,22 +24,24 @@ pub struct RawRequest {
     pub local: SocketAddr,
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum UpgradeError {
-    #[error("IO error while trying to upgrade to RawRequest: {0}")]
-    IoError(#[from] std::io::Error),
+impl UpgradeService {
+    pub fn new(acceptor: Arc<TlsAcceptor>) -> Self {
+        Self { tls_acceptor: acceptor }
+    }
 }
 
 impl Service<TcpStream> for UpgradeService {
     type Response = RawRequest;
-    type Error = ();
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>>>>;
+    type Error = std::io::Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, mut stream: TcpStream) -> Self::Future {
+        let acceptor = self.tls_acceptor.clone();
+
         Box::pin(async move {
             let tls = check_for_tls(&mut stream).await?;
 
@@ -47,7 +49,7 @@ impl Service<TcpStream> for UpgradeService {
             let local= stream.local_addr()?;
 
             let (stream, sni, alpn) = if tls {
-                let tls_stream = self.tls_acceptor.accept(stream).await?;
+                let tls_stream = acceptor.accept(stream).await?;
 
                 let info = tls_stream.get_ref().1;
                 let sni = info.sni_hostname().map(|str| str.to_string());
