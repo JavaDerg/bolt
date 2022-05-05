@@ -1,1 +1,2 @@
-mod raw;
+pub mod http;
+pub mod raw;
