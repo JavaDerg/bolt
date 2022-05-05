@@ -8,3 +8,6 @@ ahash = "0.7.6"
 aho-corasick = "0.7.18"
 bolt_url = { path = "../bolt_url" }
 regex = "1.5.5"
+
+[dev-dependencies]
+pretty_assertions = "1.2.1"
