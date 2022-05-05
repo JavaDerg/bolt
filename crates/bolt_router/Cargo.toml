@@ -1,0 +1,10 @@
+[package]
+name = "bolt_router"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ahash = "0.7.6"
+aho-corasick = "0.7.18"
+bolt_url = { path = "../bolt_url" }
+regex = "1.5.5"

@@ -9,14 +9,16 @@ use std::borrow::Cow;
 
 mod hex;
 
-/// Unsanitized!
+/// Unnormalized!
 pub fn url_path(i: &str) -> IResult<&str, (Vec<String>, Option<String>)> {
     let (i, _) = opt(tag("/"))(i)?;
-    let (i, part) = pstr(i, false)?;
+    let (i, part) = opt(|i| pstr(i, false))(i)?;
+    let vec = part.map(|p| vec![p]).unwrap_or_default();
 
     let (i, parts) = fold_many0(
         seg,
-        || vec![part.clone()],
+        // Sadly we can't move vec in
+        || vec.clone(),
         |mut acc, str| {
             acc.push(str);
             acc

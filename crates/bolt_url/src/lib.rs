@@ -1,11 +1,15 @@
 mod parse;
+#[cfg(test)]
+mod tests;
 
 use std::str::FromStr;
+use unicode_normalization::UnicodeNormalization;
 
+#[derive(Debug, Clone)]
 pub struct UrlPath {
-    total: String,
-    segments: Vec<String>,
-    query: Option<String>,
+    pub(crate) total: String,
+    pub(crate) parts: Vec<String>,
+    pub(crate) query: Option<String>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -26,8 +30,12 @@ impl FromStr for UrlPath {
 
         Ok(UrlPath {
             total: s.to_string(),
-            segments: parts,
-            query,
+            parts: parts.into_iter().map(|s| normalize_str(&s)).collect(),
+            query: query.map(|s| normalize_str(&s)),
         })
     }
+}
+
+pub fn normalize_str(s: &str) -> String {
+    s.nfc().collect::<String>()
 }

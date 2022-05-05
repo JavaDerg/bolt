@@ -12,8 +12,9 @@ use tower::{Service, ServiceExt};
 use tracing::error;
 
 mod cli;
-mod tls;
 mod layers;
+mod tls;
+mod util;
 
 fn main() {
     let cpus = num_cpus::get();
@@ -67,16 +68,15 @@ async fn listen(addr: SocketAddr) -> Result<(), ListenError> {
             .map_err(|err| ListenError::AcceptFailure(err, addr))?;
 
         let future = handler.ready().await?.call(stream);
-        let jh: JoinHandle<Result<(), ConnError>> =
-            tokio::task::spawn(async move {
-                let request = future.await?;
-                layers::http::RawWebService {}
-                    .ready()
-                    .await?
-                    .call(request)
-                    .await?;
-                Ok(())
-            });
+        let jh: JoinHandle<Result<(), ConnError>> = tokio::task::spawn(async move {
+            let request = future.await?;
+            layers::http::RawWebService {}
+                .ready()
+                .await?
+                .call(request)
+                .await?;
+            Ok(())
+        });
     }
 
     Ok(())
