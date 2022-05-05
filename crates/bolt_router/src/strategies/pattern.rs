@@ -5,12 +5,15 @@ pub struct RegexStrategy {
     table: Vec<Slot>,
 }
 
+#[derive(Default)]
 pub struct RegexStrategyBuilder {
     patterns: Vec<String>,
     table: Vec<Slot>,
 }
 
 impl Strategy for RegexStrategy {
+    type Builder = RegexStrategyBuilder;
+
     fn r#match(&self, segment: &str) -> Option<Slot> {
         self.regex_set
             .matches(segment)

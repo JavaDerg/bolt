@@ -1,4 +1,4 @@
-use crate::strategies::{Slot, Strategy};
+use crate::strategies::{Builder, Slot, Strategy};
 
 /// This strategy tries to find the most specific match of a domain respecting the domain hierarchy.
 ///
@@ -22,9 +22,15 @@ pub struct DomainLevelsStrategy {
     table: Vec<Slot>,
 }
 
+#[derive(Default)]
+pub struct DomainLevelsStrategyBuilder;
+
 impl Strategy for DomainLevelsStrategy {
+    type Builder = DomainLevelsStrategyBuilder;
+
     fn r#match(&self, string: &str) -> Option<Slot> {
-        self.matcher.find_iter(self)
+        self.matcher
+            .find_iter(string)
             // The matches must be aligned to the end of the domain
             .filter(|m| m.end() == string.len())
             // The match may not be inside of the domain, only two cases are valid:
@@ -34,5 +40,18 @@ impl Strategy for DomainLevelsStrategy {
             // Find the longest match as it is the most specific
             .min_by(|x, y| x.start().cmp(&y.start()))
             .map(|m| self.table[m.pattern()])
+    }
+}
+
+impl Builder for DomainLevelsStrategyBuilder {
+    type Strategy = DomainLevelsStrategy;
+    type Error = ();
+
+    fn build(self) -> Result<Self::Strategy, Self::Error> {
+        todo!()
+    }
+
+    fn add(&mut self, string: &str, slot: Slot) -> &mut Self {
+        todo!()
     }
 }

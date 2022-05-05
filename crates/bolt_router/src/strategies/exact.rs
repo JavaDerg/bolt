@@ -4,11 +4,14 @@ pub struct ExactStrategy {
     table: ahash::AHashMap<String, Slot>,
 }
 
+#[derive(Default)]
 pub struct ExactStrategyBuilder {
     table: ahash::AHashMap<String, Slot>,
 }
 
 impl Strategy for ExactStrategy {
+    type Builder = ExactStrategyBuilder;
+
     fn r#match(&self, segment: &str) -> Option<Slot> {
         self.table.get(segment).cloned()
     }
