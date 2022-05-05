@@ -29,7 +29,9 @@ impl Builder for RegexStrategyBuilder {
 
     fn build(self) -> Result<Self::Strategy, Self::Error> {
         Ok(RegexStrategy {
-            regex_set: self.regex_set.build()?,
+            regex_set: regex::RegexSetBuilder::new(self.patterns)
+                .unicode(true)
+                .build()?,
             table: self.table,
         })
     }
