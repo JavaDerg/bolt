@@ -64,11 +64,16 @@ mod tests {
             .unwrap();
 
         assert_eq!(strategy.table.len(), 2);
+
+        let mut vec = strategy.table.into_iter().collect::<Vec<_>>();
+        // Vec must be presorted by slot as that's the order we check it by
+        vec.sort_by(|x, y| x.1.0.cmp(&y.1.0));
+
         assert_eq!(
-            strategy.table.into_iter().collect::<Vec<_>>(),
+            vec,
             vec![
                 ("hi.com".to_string(), Slot(1)),
-                ("www.hi.com".to_string(), Slot(2))
+                ("www.hi.com".to_string(), Slot(2)),
             ]
         );
     }
