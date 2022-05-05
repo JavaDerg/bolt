@@ -30,3 +30,60 @@ impl Builder for ExactStrategyBuilder {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builder() {
+        let strategy = ExactStrategy::builder();
+
+        assert_eq!(strategy.table.len(), 0);
+        assert_eq!(strategy.table.into_iter().collect::<Vec<_>>(), vec![]);
+    }
+
+    #[test]
+    fn builder_add() {
+        let mut strategy = ExactStrategy::builder();
+        strategy.add("hi.com", Slot(1));
+
+        assert_eq!(strategy.table.len(), 1);
+        assert_eq!(
+            strategy.table.into_iter().collect::<Vec<_>>(),
+            vec![("hi.com".to_string(), Slot(1))]
+        );
+    }
+
+    #[test]
+    fn build() {
+        let strategy = ExactStrategy::builder()
+            .add_owned("hi.com", Slot(1))
+            .add_owned("www.hi.com", Slot(2))
+            .build()
+            .unwrap();
+
+        assert_eq!(strategy.table.len(), 2);
+        assert_eq!(
+            strategy.table.into_iter().collect::<Vec<_>>(),
+            vec![
+                ("hi.com".to_string(), Slot(1)),
+                ("www.hi.com".to_string(), Slot(2))
+            ]
+        );
+    }
+
+    #[test]
+    fn r#match() {
+        let strategy = ExactStrategy::builder()
+            .add_owned("hi.com", Slot(1))
+            .add_owned("www.hi.com", Slot(2))
+            .build()
+            .unwrap();
+
+        assert_eq!(strategy.r#match("hi.com"), Some(Slot(1)));
+        assert_eq!(strategy.r#match("www.hi.com"), Some(Slot(2)));
+        assert_eq!(strategy.r#match("www.hi.com.com"), None);
+        assert_eq!(strategy.r#match("www.www.hi.com"), None);
+    }
+}
