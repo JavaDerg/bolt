@@ -18,6 +18,20 @@ pub enum ParseError {
     NomError,
 }
 
+impl UrlPath {
+    pub fn total(&self) -> &str {
+        &self.total
+    }
+
+    pub fn parts(&self) -> &[String] {
+        &self.parts
+    }
+
+    pub fn query(&self) -> Option<&str> {
+        self.query.as_deref()
+    }
+}
+
 impl FromStr for UrlPath {
     type Err = ParseError;
 
