@@ -1,8 +1,10 @@
-use crate::strategies::{Builder, Slot, Strategy};
+use std::sync::Arc;
+use regex::Regex;
+use crate::strategies::{Builder, Slot, Strategy, StrategyMatch};
 
 pub struct RegexStrategy {
     regex_set: regex::RegexSet,
-    regexes: Vec<regex::Regex>,
+    regexes: Vec<Arc<regex::Regex>>,
     table: Vec<Slot>,
 }
 
@@ -12,17 +14,26 @@ pub struct RegexStrategyBuilder {
     table: Vec<Slot>,
 }
 
+pub struct RegexMatch {
+    pattern: Arc<Regex>,
+}
+
 impl Strategy for RegexStrategy {
     type Builder = RegexStrategyBuilder;
 
-    fn r#match(&self, segment: &str) -> Option<Slot> {
-        let mtc = self.regex_set.matches(segment).into_iter().next()?;
+    fn r#match(&self, segment: &str) -> Option<StrategyMatch> {
+        let index = self.regex_set.matches(segment).into_iter().next()?;
 
-        let regex = &self.regexes[mtc];
+        let regex = &self.regexes[index];
         regex
             .find(segment)
             .filter(|m| m.start() == 0 && m.end() == segment.len())
-            .map(|_m| self.table[mtc])
+            .map(|m| StrategyMatch {
+                slot: self.table[index],
+                any: Some(Box::new(RegexMatch {
+                    pattern: regex.clone(),
+                })),
+            })
     }
 }
 
@@ -38,7 +49,7 @@ impl Builder for RegexStrategyBuilder {
             regexes: self
                 .patterns
                 .into_iter()
-                .map(|p| regex::RegexBuilder::new(&p).unicode(true).build())
+                .map(|p| regex::RegexBuilder::new(&p).unicode(true).build().map(Arc::new))
                 .collect::<Result<Vec<_>, _>>()?,
             table: self.table,
         })
@@ -96,14 +107,14 @@ mod tests {
             .build()
             .unwrap();
 
-        assert_eq!(strategy.r#match("abc"), Some(Slot(0)));
-        assert_eq!(strategy.r#match("xyz"), Some(Slot(0)));
-        assert_eq!(strategy.r#match("123"), Some(Slot(1)));
-        assert_eq!(strategy.r#match("789"), Some(Slot(1)));
+        assert_eq!(strategy.r#match("abc").map(|m| m.slot), Some(Slot(0)));
+        assert_eq!(strategy.r#match("xyz").map(|m| m.slot), Some(Slot(0)));
+        assert_eq!(strategy.r#match("123").map(|m| m.slot), Some(Slot(1)));
+        assert_eq!(strategy.r#match("789").map(|m| m.slot), Some(Slot(1)));
 
-        assert_eq!(strategy.r#match("ab1"), None);
-        assert_eq!(strategy.r#match("abcd"), None);
-        assert_eq!(strategy.r#match("1234"), None);
-        assert_eq!(strategy.r#match(""), None);
+        assert_eq!(strategy.r#match("ab1").map(|m| m.slot), None);
+        assert_eq!(strategy.r#match("abcd").map(|m| m.slot), None);
+        assert_eq!(strategy.r#match("1234").map(|m| m.slot), None);
+        assert_eq!(strategy.r#match("").map(|m| m.slot), None);
     }
 }

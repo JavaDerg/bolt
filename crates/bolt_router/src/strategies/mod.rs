@@ -1,15 +1,23 @@
+use std::any::Any;
+
 mod domain_levels;
 mod exact;
 mod pattern;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(transparent)]
-pub struct Slot(pub(crate) u64);
+pub struct Slot(pub u64);
+
+/// Carries both the matched slot and dynamic information about it
+pub struct StrategyMatch {
+    pub slot: Slot,
+    pub any: Option<Box<dyn Any + Send + Sync + 'static>>
+}
 
 pub trait Strategy: 'static + Sync {
     type Builder: Builder;
 
-    fn r#match(&self, string: &str) -> Option<Slot>;
+    fn r#match(&self, string: &str) -> Option<StrategyMatch>;
 
     fn builder() -> Self::Builder {
         Self::Builder::default()
@@ -21,6 +29,7 @@ pub trait Builder: Default {
     type Error;
 
     fn build(self) -> Result<Self::Strategy, Self::Error>;
+
     // Input is expected to be normalized and NOT url-encoded
     fn add(&mut self, string: &str, slot: Slot) -> &mut Self;
     fn add_unnormalized(&mut self, segment: &str, slot: Slot) -> &mut Self {

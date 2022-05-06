@@ -1,4 +1,4 @@
-use crate::strategies::{Builder, Slot, Strategy};
+use crate::strategies::{Builder, Slot, Strategy, StrategyMatch};
 
 pub struct ExactStrategy {
     table: ahash::AHashMap<String, Slot>,
@@ -12,8 +12,13 @@ pub struct ExactStrategyBuilder {
 impl Strategy for ExactStrategy {
     type Builder = ExactStrategyBuilder;
 
-    fn r#match(&self, segment: &str) -> Option<Slot> {
-        self.table.get(segment).cloned()
+    fn r#match(&self, segment: &str) -> Option<StrategyMatch> {
+        self.table.get(segment).map(|slot| {
+            StrategyMatch {
+                slot: slot.clone(),
+                any: None,
+            }
+        })
     }
 }
 
@@ -87,9 +92,9 @@ mod tests {
             .build()
             .unwrap();
 
-        assert_eq!(strategy.r#match("hi.com"), Some(Slot(1)));
-        assert_eq!(strategy.r#match("www.hi.com"), Some(Slot(2)));
-        assert_eq!(strategy.r#match("www.hi.com.com"), None);
-        assert_eq!(strategy.r#match("www.www.hi.com"), None);
+        assert_eq!(strategy.r#match("hi.com").map(|m| m.slot), Some(Slot(1)));
+        assert_eq!(strategy.r#match("www.hi.com").map(|m| m.slot), Some(Slot(2)));
+        assert_eq!(strategy.r#match("www.hi.com.com").map(|m| m.slot), None);
+        assert_eq!(strategy.r#match("www.www.hi.com").map(|m| m.slot), None);
     }
 }
