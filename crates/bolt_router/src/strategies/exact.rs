@@ -38,10 +38,10 @@ mod tests {
 
     #[test]
     fn builder() {
-        let strategy = ExactStrategy::builder();
+        let builder = ExactStrategy::builder();
 
-        assert_eq!(strategy.table.len(), 0);
-        assert_eq!(strategy.table.into_iter().collect::<Vec<_>>(), vec![]);
+        assert_eq!(builder.table.len(), 0);
+        assert_eq!(builder.table.into_iter().collect::<Vec<_>>(), vec![]);
     }
 
     #[test]
@@ -68,7 +68,7 @@ mod tests {
 
         let mut vec = strategy.table.into_iter().collect::<Vec<_>>();
         // Vec must be presorted by slot as that's the order we check it by
-        vec.sort_by(|x, y| x.1.0.cmp(&y.1.0));
+        vec.sort_by(|x, y| x.1 .0.cmp(&y.1 .0));
 
         assert_eq!(
             vec,

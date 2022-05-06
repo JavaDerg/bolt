@@ -1,4 +1,4 @@
-use nom::bytes::complete::{tag, take_while1};
+use nom::bytes::complete::tag;
 use nom::bytes::streaming::take_while_m_n;
 use nom::combinator::map_res;
 use nom::multi::many1;

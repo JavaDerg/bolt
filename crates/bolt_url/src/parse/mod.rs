@@ -3,7 +3,7 @@
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while1};
 use nom::combinator::opt;
-use nom::multi::{fold_many0, fold_many1, many1};
+use nom::multi::{fold_many0, fold_many1};
 use nom::{Err, IResult};
 use std::borrow::Cow;
 

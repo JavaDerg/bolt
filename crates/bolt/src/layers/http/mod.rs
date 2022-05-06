@@ -1,7 +1,6 @@
-use crate::layers::raw::stream::EitherStream;
 use crate::layers::raw::RawRequest;
 use crate::util::PinResultFuture;
-use hyper::{Body, Request, Response, Server};
+use hyper::{Body, Request, Response};
 use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
@@ -49,7 +48,7 @@ impl Service<Request<Body>> for WebService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, _req: Request<Body>) -> Self::Future {
         Box::pin(async move { Ok(Response::builder().status(200).body(Body::empty()).unwrap()) })
     }
 }

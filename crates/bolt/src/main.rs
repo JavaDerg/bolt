@@ -1,12 +1,7 @@
-use std::io::{Error, IoSlice};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
-use tokio_rustls::server::TlsStream;
 use tokio_rustls::TlsAcceptor;
 use tower::{Service, ServiceExt};
 use tracing::error;
@@ -78,6 +73,4 @@ async fn listen(addr: SocketAddr) -> Result<(), ListenError> {
             Ok(())
         });
     }
-
-    Ok(())
 }
