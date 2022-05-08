@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bolt_router = { path = "../bolt_router" }
 nom = "7.1.1"
+

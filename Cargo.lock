@@ -80,6 +80,7 @@ dependencies = [
 name = "bolt_config"
 version = "0.1.0"
 dependencies = [
+ "bolt_router",
  "nom",
 ]
 
