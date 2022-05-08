@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use regex::Regex;
 use crate::strategies::{Builder, Slot, Strategy, StrategyMatch};
+use regex::Regex;
+use std::sync::Arc;
 
 pub struct RegexStrategy {
     regex_set: regex::RegexSet,
-    regexes: Vec<Arc<regex::Regex>>,
+    regexes: Vec<Arc<Regex>>,
     table: Vec<Slot>,
 }
 
@@ -49,7 +49,12 @@ impl Builder for RegexStrategyBuilder {
             regexes: self
                 .patterns
                 .into_iter()
-                .map(|p| regex::RegexBuilder::new(&p).unicode(true).build().map(Arc::new))
+                .map(|p| {
+                    regex::RegexBuilder::new(&p)
+                        .unicode(true)
+                        .build()
+                        .map(Arc::new)
+                })
                 .collect::<Result<Vec<_>, _>>()?,
             table: self.table,
         })
