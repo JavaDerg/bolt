@@ -8,7 +8,7 @@ pub trait ConfigProvider: 'static + Send + Sync {
 }
 
 pub trait VHostsProvider: 'static + Send + Sync {
-    fn vhosts(&self) -> DomainRouter<Box<dyn VHost>>;
+    fn vhosts(&self) -> DomainRouter;
     fn default(&self) -> Option<Box<dyn VHost>>;
 }
 
