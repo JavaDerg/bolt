@@ -1,3 +1,5 @@
+mod location_service;
+
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use hashbrown::HashMap;
 use itertools::Itertools;
@@ -9,16 +11,8 @@ pub type LocationMatcher<'a, S, O, C, I, ItE, ItF, ItR> =
 pub type DomainMatcher<'a, S, O, C, I, ItE, ItF, ItR> =
     NaiveMatcher<'a, S, O, C, SuffixMatcher<'a, S, O, C, I, ItF, '.'>, I, ItE, ItR>;
 
-pub struct NaiveMatcher<
-    'a,
-    S,
-    O,
-    C,
-    FM,
-    I = &'a str,
-    ItE = fn(I) -> &'a str,
-    ItR = fn(I) -> &'a str,
-> where
+pub struct NaiveMatcher<'a, S, O, C, FM, I = str, ItE = fn(I) -> &'a str, ItR = fn(I) -> &'a str>
+where
     C: Fn(&S) -> O,
     FM: Matcher<S, I, O>,
     ItE: Fn(I) -> &'a str,
@@ -29,6 +23,7 @@ pub struct NaiveMatcher<
     regex: Option<RegexMatcher<'a, S, O, C, I, ItR>>,
 
     default: Option<S>,
+    converter: C,
 }
 
 pub trait Matcher<S, I, O>: Sized {
@@ -107,7 +102,72 @@ where
                 None
             },
             default,
+            converter,
         })
+    }
+}
+
+impl<'a, S, O, C, I, ItE, ItF, ItR, const SEP: char>
+    NaiveMatcher<'a, S, O, C, PrefixMatcher<'a, S, O, C, I, ItF, SEP>, I, ItE, ItR>
+where
+    C: Fn(&S) -> O + Clone,
+    ItE: Fn(I) -> &'a str,
+    ItF: Fn(I) -> &'a str,
+    ItR: Fn(I) -> &'a str,
+{
+    pub fn new_prefix(
+        exact: Vec<(String, S)>,
+        fixed: Vec<(String, S)>,
+        regex: Vec<(String, S)>,
+        default: Option<S>,
+        converter: C,
+        exact_input_transformer: ItE,
+        fixed_input_transformer: ItF,
+        regex_input_transformer: ItR,
+    ) -> eyre::Result<Self> {
+        Self::new(
+            exact,
+            fixed,
+            regex,
+            default,
+            converter,
+            PrefixMatcher::build,
+            exact_input_transformer,
+            fixed_input_transformer,
+            regex_input_transformer,
+        )
+    }
+}
+
+impl<'a, S, O, C, I, ItE, ItF, ItR, const SEP: char>
+    NaiveMatcher<'a, S, O, C, SuffixMatcher<'a, S, O, C, I, ItF, SEP>, I, ItE, ItR>
+where
+    C: Fn(&S) -> O + Clone,
+    ItE: Fn(I) -> &'a str,
+    ItF: Fn(I) -> &'a str,
+    ItR: Fn(I) -> &'a str,
+{
+    pub fn new_suffix(
+        exact: Vec<(String, S)>,
+        fixed: Vec<(String, S)>,
+        regex: Vec<(String, S)>,
+        default: Option<S>,
+        converter: C,
+        exact_input_transformer: ItE,
+        fixed_input_transformer: ItF,
+        regex_input_transformer: ItR,
+    ) -> eyre::Result<Self> {
+        Self::new(
+            exact,
+            fixed,
+            regex,
+            default,
+            converter,
+            SuffixMatcher::build,
+            exact_input_transformer,
+            fixed_input_transformer,
+            regex_input_transformer,
+        )
     }
 }
 

@@ -105,10 +105,19 @@ name = "bolt_router"
 version = "0.1.0"
 dependencies = [
  "aho-corasick",
+ "bolt_service",
  "eyre",
  "hashbrown",
  "itertools",
  "regex",
+ "tower",
+]
+
+[[package]]
+name = "bolt_service"
+version = "0.1.0"
+dependencies = [
+ "hyper",
  "tower",
 ]
 
