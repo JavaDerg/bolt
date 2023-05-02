@@ -4,14 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tracing = "0.1.36"
-tracing-subscriber = "0.3.15"
-eyre = "0.6.8"
-color-eyre = "0.6.2"
-thiserror = "1.0.35"
-tokio = { version = "1.21.1", features = ["rt-multi-thread", "macros", "net"] }
-tower = "0.4.13"
-hyper = { version = "0.14.20", features = ["server", "http1", "http2", "stream"] }
-tokio-rustls = "0.23.4"
-
-bolt_router = { path = "../bolt_router" }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+eyre = "0.6"
+color-eyre = "0.6"
+flume = "0.10"
+thiserror = "1.0"
+tokio = { version = "1.28", features = ["rt-multi-thread", "macros", "net"] }
+tower = { version = "0.4.13", features = ["full"] } # disable full in release
+hyper = { version = "0.14", features = ["server", "http1", "http2", "stream"] }
+tokio-rustls = "0.24"
+pin-project = "1.0"
